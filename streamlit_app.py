@@ -18,39 +18,64 @@ if 'saldo_usdt' not in st.session_state:
     st.session_state.bot_ativo = False
     st.session_state.preco_referencia = 0.0
     st.session_state.historico_precos = []
-    st.session_state.queda_autonoma = 0.2
-    st.session_state.lucro_autonomo = 0.4
+    st.session_state.queda_autonoma = 0.15
+    st.session_state.lucro_autonomo = 0.35
 
-# Cores e Estilos CSS Premium (Tema de Fogo)
-cor_b = "#28a745" if st.session_state.bot_ativo else "#dc3545"
-cor_h = "#218838" if st.session_state.bot_ativo else "#c82333"
+# Cores e Estilos CSS Inspirados no Concorrente (Melhorado com tons de Fogo)
+cor_b = "#00cc66" if st.session_state.bot_ativo else "#cc3333"
+cor_h = "#00aa55" if st.session_state.bot_ativo else "#aa2222"
 
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: #060303; color: #ffffff; }}
-    h1 {{ color: #ff4500 !important; text-align: center; font-family: sans-serif; font-weight: 900; text-shadow: 0px 0px 15px #ff8c00; margin-bottom: 2px; }}
-    .subtitle {{ text-align: center; color: #ffaa00; font-size: 1.1rem; margin-bottom: 25px; font-style: italic; }}
-    .metric-card {{
-        background: linear-gradient(135deg, #140b0b 0%, #26110f 100%);
-        border: 1px solid #ff450055; padding: 20px; border-radius: 12px; text-align: center;
-        box-shadow: 0 4px 15px rgba(255, 69, 0, 0.1);
-    }}
-    .metric-title {{ color: #aaaaaa; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }}
-    .metric-value {{ color: #ffffff; font-size: 1.8rem; font-weight: 700; margin-top: 5px; }}
-    .metric-badge {{ display: inline-block; padding: 4px 10px; background: #ff450022; color: #ff8c00; border-radius: 20px; font-size: 0.8rem; margin-top: 8px; font-weight: bold; border: 1px solid #ff450044; }}
+    .stApp {{ background-color: #0b0f17; color: #ffffff; font-family: sans-serif; }}
+    
+    /* Título Superior */
+    h1 {{ color: #ff5500 !important; text-align: left; font-size: 1.8rem; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 20px; }}
+    
+    /* Botão Principal Estilo Radar */
     div.stButton > button:first-child {{
         background-color: {cor_b} !important; color: white !important; border: none !important;
-        padding: 16px !important; font-size: 18px !important; font-weight: bold !important;
-        border-radius: 10px !important; width: 100% !important; transition: all 0.3s ease !important;
+        padding: 10px 20px !important; font-size: 14px !important; font-weight: bold !important;
+        border-radius: 6px !important; width: auto !important; transition: all 0.3s ease !important;
+        text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;
     }}
-    div.stButton > button:first-child:hover {{ background-color: {cor_h} !important; transform: scale(1.005); }}
+    div.stButton > button:first-child:hover {{ background-color: {cor_h} !important; }}
+    
+    /* Cards de Métricas Compactos */
+    .metric-container {{
+        display: flex; gap: 15px; margin-bottom: 20px;
+    }}
+    .metric-card {{
+        background-color: #121824; border: 1px solid #1f293d; padding: 15px 25px; border-radius: 6px; flex: 1; text-align: center;
+    }}
+    .metric-title {{ color: #8492a6; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }}
+    .metric-value {{ color: #ffffff; font-size: 1.4rem; font-weight: 700; }}
+    
+    /* Banner de IA Temporal */
+    .ia-banner {{
+        background-color: #0c2520; border-left: 4px solid #00cc66; padding: 12px 20px; border-radius: 4px; color: #00ffaa; font-size: 0.9rem; font-weight: 600; margin-bottom: 25px;
+    }}
+    
+    /* Logs de Operações */
+    .log-box {{
+        background-color: #121824; border: 1px solid #1f293d; padding: 14px 20px; border-radius: 6px; color: #8492a6; font-size: 0.9rem; margin-bottom: 10px; font-family: monospace;
+    }}
+    .log-box-buy {{ color: #00ffaa; }}
+    .log-box-sell {{ color: #ff5555; }}
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🐴 SARA_FIREBOT — AUTONOMOUS BOT V3")
-st.markdown("<p class='subtitle'>🔥 Algoritmo Adaptativo: Motor Quântico Otimizando Alvos em Tempo Real</p>", unsafe_allow_html=True)
+# Topo do Dashboard
+st.title("🐴 SARA_FIREBOT — ADAPTIVE QUANTUM V3")
 
-# Banco de Dados Supabase Inteligente (Limpeza Automática)
+# Botão de Ativação estilo Minimalista
+txt_btn = "🟢 RADAR ATIVO (CLIQUE PARA PAUSAR)" if st.session_state.bot_ativo else "🔴 RADAR OFFLINE (CLIQUE PARA LIGAR)"
+if st.button(txt_btn):
+    st.session_state.bot_ativo = not st.session_state.bot_ativo
+    if st.session_state.bot_ativo: st.session_state.preco_referencia = preco_atual
+    st.rerun()
+
+# Banco de Dados Supabase (Fundo Otimizado)
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
@@ -64,7 +89,7 @@ def guardar_log(msg):
                 supabase.table("historico_bot").delete().lt("id", res.data[-1]["id"]).execute()
         except: pass
 
-# Inteligência Quântica: Análise de Volatilidade Recente (Últimos 30m)
+# Inteligência de Volatilidade da Janela Temporal
 @st.cache_data(ttl=20)
 def recalcular_alvos_mercado():
     try:
@@ -72,91 +97,93 @@ def recalcular_alvos_mercado():
         velas = ex.fetch_ohlcv('BTC/USDT', timeframe='1m', limit=30)
         df = pd.DataFrame(velas, columns=['t', 'o', 'h', 'l', 'c', 'v'])
         var_media = ((df['h'] - df['l']) / df['l']).mean() * 100
-        return max(0.04, round(var_media * 0.5, 2)), max(0.08, round(var_media * 1.1, 2))
+        return max(0.05, round(var_media * 0.4, 2)), max(0.10, round(var_media * 0.9, 2))
     except:
-        return 0.12, 0.25
+        return 0.10, 0.20
 
 if st.session_state.bot_ativo:
     st.session_state.queda_autonoma, st.session_state.lucro_autonomo = recalcular_alvos_mercado()
 
-# Consulta de Preço com Fallback dinâmico
+# Captura de Preço Real da Binance
 @st.cache_data(ttl=2)
 def pegar_preco_binance():
     try: return ccxt.binance().fetch_ticker('BTC/USDT')['last']
     except: return None
 
 res_preco = pegar_preco_binance()
-preco_atual = res_preco if res_preco is not None else (st.session_state.historico_precos[-1]['preco'] + random.uniform(-10, 10) if st.session_state.historico_precos else 65000.0)
+preco_atual = res_preco if res_preco is not None else (st.session_state.historico_precos[-1]['preco'] + random.uniform(-8, 8) if st.session_state.historico_precos else 64138.0)
 
-# Alimentação do Gráfico Temporal
 st.session_state.historico_precos.append({'hora': datetime.now().strftime('%H:%M:%S'), 'preco': preco_atual})
 if len(st.session_state.historico_precos) > 30: st.session_state.historico_precos.pop(0)
 
-# Botão de Ação Reativo
-txt_btn = "🟢 DESCANSAR CAVALO DE FOGO (PAUSAR)" if st.session_state.bot_ativo else "🔴 CONVOCAR INTELIGÊNCIA AUTÔNOMA (LIGAR)"
-if st.button(txt_btn):
-    st.session_state.bot_ativo = not st.session_state.bot_ativo
-    if st.session_state.bot_ativo: st.session_state.preco_referencia = preco_atual
-    st.rerun()
+# Renderização dos Cards Alinhados e Compactos
+st.markdown(f"""
+    <div class='metric-container'>
+        <div class='metric-card'>
+            <div class='metric-title'>🔒 Saldo USDT</div>
+            <div class='metric-value'>${st.session_state.saldo_usdt:,.2f}</div>
+        </div>
+        <div class='metric-card'>
+            <div class='metric-title'>🪙 Saldo BTC</div>
+            <div class='metric-value'>{st.session_state.saldo_btc:.4f}</div>
+        </div>
+        <div class='metric-card'>
+            <div class='metric-title'>📊 Preço BTC (Binance)</div>
+            <div class='metric-value'>${preco_atual:,.2f}</div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+# Botão de Download de Relatório Estilizado Curto
+if st.session_state.historico:
+    csv_data = pd.DataFrame(st.session_state.historico, columns=["Logs"]).to_csv(index=False).encode('utf-8')
+    st.download_button(label="📥 Baixar Relatório de Caça (CSV)", data=csv_data, file_name="sara_firebot_logs.csv", mime='text/csv')
 
 st.write("")
 
-# Renderização do Dashboard Premium
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.markdown(f"<div class='metric-card'><div class='metric-title'>💰 Saldo USDT</div><div class='metric-value'>${st.session_state.saldo_usdt:,.2f}</div><div class='metric-badge'>Livre para Compra</div></div>", unsafe_allow_html=True)
-with m2:
-    st.markdown(f"<div class='metric-card'><div class='metric-title'>🪙 Carteira Ativos</div><div class='metric-value'>{st.session_state.saldo_btc:.5f} BTC</div><div class='metric-badge'>Exposição Atual</div></div>", unsafe_allow_html=True)
-with m3:
-    b_txt = f"📉 Queda Auto: {st.session_state.queda_autonoma}% | 📈 Lucro Auto: {st.session_state.lucro_autonomo}%" if st.session_state.bot_ativo else "Sistema Ocioso"
-    st.markdown(f"<div class='metric-card'><div class='metric-title'>📊 Cotação BTC Real</div><div class='metric-value'>${preco_atual:,.2f}</div><div class='metric-badge'>{b_txt}</div></div>", unsafe_allow_html=True)
+# Banner de Status de Inteligência Temporal
+if st.session_state.bot_ativo:
+    st.markdown(f"<div class='ia-banner'>🎯 IA TEMPORAL: Janela Ativa | Alvo Queda: -{st.session_state.queda_autonoma}% | Alvo Lucro: +{st.session_state.lucro_autonomo}%</div>", unsafe_allow_html=True)
+else:
+    st.markdown("<div class='ia-banner' style='background-color: #241c1c; border-left-color: #cc3333; color: #ff6666;'>💤 IA TEMPORAL: Sistema em modo de descanso no santuário.</div>", unsafe_allow_html=True)
 
-st.write("")
-
-# Exibição do Gráfico de Área Fluido
+# Gráfico Técnico Ocultado/Integrado de Forma Fluida
 df_p = pd.DataFrame(st.session_state.historico_precos)
-fig = go.Figure(go.Scatter(x=df_p['hora'], y=df_p['preco'], mode='lines', line=dict(color='#ff4500', width=3), fill='tozeroy', fillcolor='rgba(255, 69, 0, 0.02)'))
-fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=10, r=10, t=10, b=10), height=200, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
-st.plotly_chart(fig, use_container_width=True)
+fig = go.Figure(go.Scatter(x=df_p['hora'], y=df_p['preco'], mode='lines', line=dict(color='#ff5500', width=2), fill='tozeroy', fillcolor='rgba(255, 85, 0, 0.01)'))
+fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=5, r=5, t=5, b=5), height=130, xaxis=dict(showgrid=False, visible=False), yaxis=dict(showgrid=False, visible=False))
+st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
-# Execução Matemática dos Alvos de Operação
+# Processamento do Motor Algorítmico
 if st.session_state.bot_ativo:
     diff = ((preco_atual - st.session_state.preco_referencia) / st.session_state.preco_referencia) * 100
     
     if st.session_state.saldo_usdt > 100 and diff <= -st.session_state.queda_autonoma:
         qtd = st.session_state.saldo_usdt / preco_atual
         st.session_state.saldo_btc, st.session_state.saldo_usdt, st.session_state.preco_referencia = qtd, 0.0, preco_atual
-        msg = f"🛒 COMPRA AUTOMÁTICA [{datetime.now().strftime('%H:%M')}]: Entrada executada a ${preco_atual:,.2f} após recuo de {diff:.2f}%."
+        msg = f"🛒 [{datetime.now().strftime('%H:%M:%S')}] COMPRA: Entrada executada a ${preco_atual:,.2f} | Gatilho IA: -{st.session_state.queda_autonoma}%"
         st.session_state.historico.append(msg)
         guardar_log(msg)
-        st.toast("🔥 Compra disparada com sucesso!")
+        st.toast("🔥 Compra executada pelo radar!")
         st.rerun()
         
     elif st.session_state.saldo_btc > 0 and diff >= st.session_state.lucro_autonomo:
         lucro = st.session_state.saldo_btc * preco_atual
         st.session_state.saldo_usdt, st.session_state.saldo_btc, st.session_state.preco_referencia = lucro, 0.0, preco_atual
-        msg = f"💰 VENDA AUTOMÁTICA [{datetime.now().strftime('%H:%M')}]: Lucro garantido (+{diff:.2f}%) liquidando a ${preco_atual:,.2f}."
+        msg = f"💰 [{datetime.now().strftime('%H:%M:%S')}] VENDA: Liquidação feita a ${preco_atual:,.2f} com lucro! | [IA: +{diff:.2f}%]"
         st.session_state.historico.append(msg)
         guardar_log(msg)
-        st.toast("👑 Meta atingida! Lucro coletado.")
+        st.toast("👑 Lucro coletado pelo radar!")
         st.rerun()
-else:
-    st.info("💡 Modo Inteligente pausado. Ligue no botão principal para ativar a análise adaptativa de mercado.")
 
-# Seção de Relatórios em CSV e Histórico Visual
-st.write("---")
-c_tit, c_down = st.columns(2)
-with c_tit: st.write("### 📜 Crônicas Quânticas de Operação")
-with c_down:
-    if st.session_state.historico:
-        csv_data = pd.DataFrame(st.session_state.historico, columns=["Logs"]).to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Baixar Relatório (CSV)", data=csv_data, file_name="sara_firebot.csv", mime='text/csv')
-
+# Histórico de Transações Estilizado
+st.markdown("### 📜 Histórico de Caça")
 if st.session_state.historico:
-    for acao in reversed(st.session_state.historico): st.info(acao)
+    for acao in reversed(st.session_state.historico):
+        classe_cor = "log-box-buy" if "COMPRA" in acao else "log-box-sell"
+        st.markdown(f"<div class='log-box {classe_cor}'>{acao}</div>", unsafe_allow_html=True)
 else:
-    st.write("*Aguardando flutuação matemática do Bitcoin para registrar ordens.*")
+    st.markdown("<div class='log-box'>*Aguardando variação analítica de Dar-Shan para registrar as crônicas.*</div>", unsafe_allow_html=True)
 
-# Loop de Execução Contínua
+# Loop de Atualização Contínua
 time.sleep(2)
 if st.session_state.bot_ativo: st.rerun()
