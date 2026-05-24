@@ -7,10 +7,10 @@ import plotly.graph_objects as go
 from datetime import datetime
 from supabase import create_client, Client
 
-# Configuração da página do Streamlit com estilo Dar-Shan / Cavalo de Fogo
+# Configuração da Página
 st.set_page_config(page_title="Sara_FireBot - Auto Bot", page_icon="🐴", layout="wide")
 
-# --- INICIALIZAÇÃO DE VARIÁVEIS DE SESSÃO ---
+# Inicialização do Estado Interno
 if 'saldo_usdt' not in st.session_state:
     st.session_state.saldo_usdt = 10000.0
     st.session_state.saldo_btc = 0.0
@@ -18,202 +18,145 @@ if 'saldo_usdt' not in st.session_state:
     st.session_state.bot_ativo = False
     st.session_state.preco_referencia = 0.0
     st.session_state.historico_precos = []
+    st.session_state.queda_autonoma = 0.2
+    st.session_state.lucro_autonomo = 0.4
 
-# Cores dinâmicas para o botão baseado no estado do robô
-cor_botao = "#28a745" if st.session_state.bot_ativo else "#dc3545"
-cor_hover = "#218838" if st.session_state.bot_ativo else "#c82333"
+# Cores e Estilos CSS Premium (Tema de Fogo)
+cor_b = "#28a745" if st.session_state.bot_ativo else "#dc3545"
+cor_h = "#218838" if st.session_state.bot_ativo else "#c82333"
 
-# Estilização visual unificada
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: #0b0606; color: #ffffff; }}
-    h1 {{ color: #ff4500 !important; text-align: center; font-family: 'Segoe UI', Roboto, sans-serif; font-weight: 800; text-shadow: 0px 0px 15px #ff8c00; margin-bottom: 5px; }}
-    .subtitle {{ text-align: center; color: #ffa500; font-size: 1.2rem; margin-bottom: 30px; font-weight: 300; }}
-    
+    .stApp {{ background-color: #060303; color: #ffffff; }}
+    h1 {{ color: #ff4500 !important; text-align: center; font-family: sans-serif; font-weight: 900; text-shadow: 0px 0px 15px #ff8c00; margin-bottom: 2px; }}
+    .subtitle {{ text-align: center; color: #ffaa00; font-size: 1.1rem; margin-bottom: 25px; font-style: italic; }}
+    .metric-card {{
+        background: linear-gradient(135deg, #140b0b 0%, #26110f 100%);
+        border: 1px solid #ff450055; padding: 20px; border-radius: 12px; text-align: center;
+        box-shadow: 0 4px 15px rgba(255, 69, 0, 0.1);
+    }}
+    .metric-title {{ color: #aaaaaa; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }}
+    .metric-value {{ color: #ffffff; font-size: 1.8rem; font-weight: 700; margin-top: 5px; }}
+    .metric-badge {{ display: inline-block; padding: 4px 10px; background: #ff450022; color: #ff8c00; border-radius: 20px; font-size: 0.8rem; margin-top: 8px; font-weight: bold; border: 1px solid #ff450044; }}
     div.stButton > button:first-child {{
-        background-color: {cor_botao} !important;
-        color: white !important;
-        border: none !important;
-        padding: 15px 30px !important;
-        font-size: 18px !important;
-        font-weight: bold !important;
-        border-radius: 8px !important;
-        width: 100% !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0px 4px 15px {cor_botao}88 !important;
+        background-color: {cor_b} !important; color: white !important; border: none !important;
+        padding: 16px !important; font-size: 18px !important; font-weight: bold !important;
+        border-radius: 10px !important; width: 100% !important; transition: all 0.3s ease !important;
     }}
-    div.stButton > button:first-child:hover {{
-        background-color: {cor_hover} !important;
-        box-shadow: 0px 6px 20px {cor_hover}bb !important;
-        transform: scale(1.01);
-    }}
+    div.stButton > button:first-child:hover {{ background-color: {cor_h} !important; transform: scale(1.005); }}
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🐴 SARA_FIREBOT — AUTONOMOUS BOT V2")
-st.markdown("<p class='subtitle'>🔥 Algoritmo de Dar-Shan: Inteligência Matemática e Estratégia Real</p>", unsafe_allow_html=True)
+st.title("🐴 SARA_FIREBOT — AUTONOMOUS BOT V3")
+st.markdown("<p class='subtitle'>🔥 Algoritmo Adaptativo: Motor Quântico Otimizando Alvos em Tempo Real</p>", unsafe_allow_html=True)
 
-# --- CONEXÃO SEGURA COM SUPABASE (VIA SECRETS) ---
+# Banco de Dados Supabase Inteligente (Limpeza Automática)
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
-supabase: Client = None
-if SUPABASE_URL and SUPABASE_KEY:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception:
-        pass
-
-def salvar_no_supabase(mensagem):
-    """Insere o log e limpa os antigos para não estourar a cota gratuita"""
+def guardar_log(msg):
     if supabase:
         try:
-            # Salva o log atual
-            supabase.table("historico_bot").insert({"operacao": mensagem}).execute()
-            
-            # Busca os registros para verificar o tamanho e economizar espaço no plano grátis
-            resposta = supabase.table("historico_bot").select("id").order("id", desc=True).execute()
-            dados = resposta.data
-            
-            # Se passar de 50 registros, deleta o excesso (mais antigos) de forma autônoma
-            if len(dados) > 50:
-                id_limite = dados[49]["id"]
-                supabase.table("historico_bot").delete().lt("id", id_limite).execute()
-        except Exception:
-            pass
+            supabase.table("historico_bot").insert({"operacao": msg}).execute()
+            res = supabase.table("historico_bot").select("id").order("id", desc=True).execute()
+            if len(res.data) > 50:
+                supabase.table("historico_bot").delete().lt("id", res.data[-1]["id"]).execute()
+        except: pass
 
-# --- SOLUÇÃO DO BUG: Coleta de preço isolada do session_state ---
-@st.cache_data(ttl=3)
-def buscar_ticker_binance():
+# Inteligência Quântica: Análise de Volatilidade Recente (Últimos 30m)
+@st.cache_data(ttl=20)
+def recalcular_alvos_mercado():
     try:
-        exchange = ccxt.binance()
-        ticker = exchange.fetch_ticker('BTC/USDT')
-        return ticker['last']
+        ex = ccxt.binance()
+        velas = ex.fetch_ohlcv('BTC/USDT', timeframe='1m', limit=30)
+        df = pd.DataFrame(velas, columns=['t', 'o', 'h', 'l', 'c', 'v'])
+        var_media = ((df['h'] - df['l']) / df['l']).mean() * 100
+        return max(0.04, round(var_media * 0.5, 2)), max(0.08, round(var_media * 1.1, 2))
     except:
-        return None
+        return 0.12, 0.25
 
-# Lógica de Fallback fora da função de cache para evitar o erro do Streamlit
-preco_api = buscar_ticker_binance()
-if preco_api is not None:
-    preco_atual = preco_api
-else:
-    base = 65000 if not st.session_state.historico_precos else st.session_state.historico_precos[-1]['preco']
-    preco_atual = base + random.uniform(-75, 75)
+if st.session_state.bot_ativo:
+    st.session_state.queda_autonoma, st.session_state.lucro_autonomo = recalcular_alvos_mercado()
 
-# Alimenta o gráfico dinâmico de preços
-tempo_agora = datetime.now().strftime('%H:%M:%S')
-st.session_state.historico_precos.append({'hora': tempo_agora, 'preco': preco_atual})
-if len(st.session_state.historico_precos) > 30:
-    st.session_state.historico_precos.pop(0)
+# Consulta de Preço com Fallback dinâmico
+@st.cache_data(ttl=2)
+def pegar_preco_binance():
+    try: return ccxt.binance().fetch_ticker('BTC/USDT')['last']
+    except: return None
 
-# --- CONFIGURAÇÃO DE PARAMÊTROS ---
-col_config1, col_config2 = st.columns(2)
-with col_config1:
-    config_queda = st.slider("Comprar se o mercado cair (%)", 0.1, 5.0, 0.5, step=0.1)
-with col_config2:
-    config_lucro = st.slider("Vender se o mercado subir (%)", 0.1, 10.0, 1.0, step=0.1)
+res_preco = pegar_preco_binance()
+preco_atual = res_preco if res_preco is not None else (st.session_state.historico_precos[-1]['preco'] + random.uniform(-10, 10) if st.session_state.historico_precos else 65000.0)
 
-st.write("")
+# Alimentação do Gráfico Temporal
+st.session_state.historico_precos.append({'hora': datetime.now().strftime('%H:%M:%S'), 'preco': preco_atual})
+if len(st.session_state.historico_precos) > 30: st.session_state.historico_precos.pop(0)
 
-# Controle liga/desliga do robô
-texto_botao = "🟢 DESCANSAR CAVALO DE FOGO (PAUSAR)" if st.session_state.bot_ativo else "🔴 CONVOCAR CAVALO DE FOGO (LIGAR)"
-if st.button(texto_botao):
+# Botão de Ação Reativo
+txt_btn = "🟢 DESCANSAR CAVALO DE FOGO (PAUSAR)" if st.session_state.bot_ativo else "🔴 CONVOCAR INTELIGÊNCIA AUTÔNOMA (LIGAR)"
+if st.button(txt_btn):
     st.session_state.bot_ativo = not st.session_state.bot_ativo
-    if st.session_state.bot_ativo:
-        st.session_state.preco_referencia = preco_atual
+    if st.session_state.bot_ativo: st.session_state.preco_referencia = preco_atual
     st.rerun()
 
-st.write("---")
+st.write("")
 
-# --- PAINEL DE MÉTRICAS ---
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric(label="💰 Fundo Disponível (USDT)", value=f"${st.session_state.saldo_usdt:,.2f}")
-with col2:
-    st.metric(label="🪙 Ativos em Carteira (BTC)", value=f"{st.session_state.saldo_btc:.4f} BTC")
-with col3:
-    st.metric(label="📊 Preço Atual BTC", value=f"${preco_atual:,.2f}", 
-              delta=f"Alvo Compra: ${st.session_state.preco_referencia * (1 - config_queda/100):,.2f}" if st.session_state.bot_ativo and st.session_state.saldo_usdt > 0 else "Análise Ativa")
+# Renderização do Dashboard Premium
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.markdown(f"<div class='metric-card'><div class='metric-title'>💰 Saldo USDT</div><div class='metric-value'>${st.session_state.saldo_usdt:,.2f}</div><div class='metric-badge'>Livre para Compra</div></div>", unsafe_allow_html=True)
+with m2:
+    st.markdown(f"<div class='metric-card'><div class='metric-title'>🪙 Carteira Ativos</div><div class='metric-value'>{st.session_state.saldo_btc:.5f} BTC</div><div class='metric-badge'>Exposição Atual</div></div>", unsafe_allow_html=True)
+with m3:
+    b_txt = f"📉 Queda Auto: {st.session_state.queda_autonoma}% | 📈 Lucro Auto: {st.session_state.lucro_autonomo}%" if st.session_state.bot_ativo else "Sistema Ocioso"
+    st.markdown(f"<div class='metric-card'><div class='metric-title'>📊 Cotação BTC Real</div><div class='metric-value'>${preco_atual:,.2f}</div><div class='metric-badge'>{b_txt}</div></div>", unsafe_allow_html=True)
 
 st.write("")
 
-# --- RENDERIZAÇÃO DO GRÁFICO ---
-df_precos = pd.DataFrame(st.session_state.historico_precos)
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df_precos['hora'], y=df_precos['preco'], mode='lines+markers',
-                         line=dict(color='#ff4500', width=3),
-                         marker=dict(color='#ffa500', size=6),
-                         name='Preço BTC'))
-fig.update_layout(title="📈 Flutuação de Mercado de Dar-Shan (Live)",
-                  template="plotly_dark",
-                  paper_bgcolor='rgba(0,0,0,0)',
-                  plot_bgcolor='rgba(0,0,0,0)',
-                  xaxis=dict(showgrid=False),
-                  yaxis=dict(showgrid=True, gridcolor='#221111'),
-                  margin=dict(l=20, r=20, t=40, b=20),
-                  height=300)
+# Exibição do Gráfico de Área Fluido
+df_p = pd.DataFrame(st.session_state.historico_precos)
+fig = go.Figure(go.Scatter(x=df_p['hora'], y=df_p['preco'], mode='lines', line=dict(color='#ff4500', width=3), fill='tozeroy', fillcolor='rgba(255, 69, 0, 0.02)'))
+fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=10, r=10, t=10, b=10), height=200, xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
 st.plotly_chart(fig, use_container_width=True)
 
-# --- MOTOR DE ESTRATÉGIA MATEMÁTICA ---
+# Execução Matemática dos Alvos de Operação
 if st.session_state.bot_ativo:
-    st.success(f"🔥 SARA_FIREBOT MONITORANDO MERCADO. Preço de Referência Base: ${st.session_state.preco_referencia:,.2f}")
+    diff = ((preco_atual - st.session_state.preco_referencia) / st.session_state.preco_referencia) * 100
     
-    variacao_percentual = ((preco_atual - st.session_state.preco_referencia) / st.session_state.preco_referencia) * 100
-    
-    if st.session_state.saldo_usdt > 100 and variacao_percentual <= -config_queda:
-        quantidade_comprar = st.session_state.saldo_usdt / preco_atual
-        st.session_state.saldo_btc += quantidade_comprar
-        st.session_state.saldo_usdt = 0.0
-        st.session_state.preco_referencia = preco_atual
-        
-        msg = f"🛒 COMPRA [{datetime.now().strftime('%d/%m %H:%M')}]: Recuo de {variacao_percentual:.2f}%. Adquiriu {quantidade_comprar:.4f} BTC a ${preco_atual:,.2f}"
+    if st.session_state.saldo_usdt > 100 and diff <= -st.session_state.queda_autonoma:
+        qtd = st.session_state.saldo_usdt / preco_atual
+        st.session_state.saldo_btc, st.session_state.saldo_usdt, st.session_state.preco_referencia = qtd, 0.0, preco_atual
+        msg = f"🛒 COMPRA AUTOMÁTICA [{datetime.now().strftime('%H:%M')}]: Entrada executada a ${preco_atual:,.2f} após recuo de {diff:.2f}%."
         st.session_state.historico.append(msg)
-        salvar_no_supabase(msg)
-        st.toast("🔥 Alvo de queda atingido! Compra executada.")
+        guardar_log(msg)
+        st.toast("🔥 Compra disparada com sucesso!")
         st.rerun()
         
-    elif st.session_state.saldo_btc > 0 and variacao_percentual >= config_lucro:
-        lucro_usdt = st.session_state.saldo_btc * preco_atual
-        st.session_state.saldo_usdt = lucro_usdt
-        st.session_state.saldo_btc = 0.0
-        st.session_state.preco_referencia = preco_atual
-        
-        msg = f"💰 VENDA [{datetime.now().strftime('%d/%m %H:%M')}]: Lucro atingido (+{variacao_percentual:.2f}%)! Venda a ${preco_atual:,.2f}. Ouro protegido!"
+    elif st.session_state.saldo_btc > 0 and diff >= st.session_state.lucro_autonomo:
+        lucro = st.session_state.saldo_btc * preco_atual
+        st.session_state.saldo_usdt, st.session_state.saldo_btc, st.session_state.preco_referencia = lucro, 0.0, preco_atual
+        msg = f"💰 VENDA AUTOMÁTICA [{datetime.now().strftime('%H:%M')}]: Lucro garantido (+{diff:.2f}%) liquidando a ${preco_atual:,.2f}."
         st.session_state.historico.append(msg)
-        salvar_no_supabase(msg)
-        st.toast("👑 Meta batida! Lucro realizado.")
+        guardar_log(msg)
+        st.toast("👑 Meta atingida! Lucro coletado.")
         st.rerun()
 else:
-    st.warning("💤 Cavalo de Fogo está descansando no santuário. Ative o painel para iniciar o rastreamento.")
+    st.info("💡 Modo Inteligente pausado. Ligue no botão principal para ativar a análise adaptativa de mercado.")
 
-# --- EXPORTAÇÃO E DOWNLOAD DE RELATÓRIO ---
+# Seção de Relatórios em CSV e Histórico Visual
 st.write("---")
-col_titulo, col_download = st.columns([4, 1])
-
-with col_titulo:
-    st.write("### 📜 Crônicas de Operação - Sara_FireBot")
-
-with col_download:
+c_tit, c_down = st.columns(2)
+with c_tit: st.write("### 📜 Crônicas Quânticas de Operação")
+with c_down:
     if st.session_state.historico:
-        # Monta um DataFrame limpo com a lista do histórico para o usuário baixar
-        df_exportar = pd.DataFrame(st.session_state.historico, columns=["Registro de Operação"])
-        csv = df_exportar.to_csv(index=False).encode('utf-8')
-        
-        st.download_button(
-            label="📥 Baixar Relatório (CSV)",
-            data=csv,
-            file_name=f"relatorio_sara_firebot_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime='text/csv',
-        )
+        csv_data = pd.DataFrame(st.session_state.historico, columns=["Logs"]).to_csv(index=False).encode('utf-8')
+        st.download_button(label="📥 Baixar Relatório (CSV)", data=csv_data, file_name="sara_firebot.csv", mime='text/csv')
 
-# Exibição visual do histórico na tela
 if st.session_state.historico:
-    for acao in reversed(st.session_state.historico):
-        st.info(acao)
+    for acao in reversed(st.session_state.historico): st.info(acao)
 else:
-    st.write("*Aguardando gatilhos matemáticos nos preços para registrar os blocos de transações.*")
+    st.write("*Aguardando flutuação matemática do Bitcoin para registrar ordens.*")
 
-# Ciclo automático de atualização dinâmica da tela
-time.sleep(3)
-if st.session_state.bot_ativo:
-    st.rerun()
+# Loop de Execução Contínua
+time.sleep(2)
+if st.session_state.bot_ativo: st.rerun()
