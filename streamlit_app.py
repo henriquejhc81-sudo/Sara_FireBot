@@ -9,14 +9,12 @@ from supabase import create_client, Client
 
 st.set_page_config(page_title="Sara_Firebolt", page_icon="⚡", layout="wide")
 
-# Inicialização de Variáveis Multi-Ativo
 if 'saldo_usdt' not in st.session_state:
     st.session_state.saldo_usdt = 10000.0
-    st.session_state.historico = []
+    st.session_state.historico = []  # Agora armazenará dicionários estruturados
     st.session_state.bot_ativo = False
     st.session_state.historico_precos = []
     
-    # Estrutura de dados isolada por ativo (BTC e ETH)
     st.session_state.ativos = {
         'BTC/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.08, 'lucro_ia': 0.18, 'last_p': 64188.0},
         'ETH/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.12, 'lucro_ia': 0.25, 'last_p': 3450.0}
@@ -26,7 +24,7 @@ URL = st.secrets.get("SUPABASE_URL", "")
 KEY = st.secrets.get("SUPABASE_KEY", "")
 supabase = create_client(URL, KEY) if URL and KEY else None
 
-def guardar_log(msg):
+def guardar_log(timestamp, par, tipo, preco, pm, msg):
     if supabase:
         try:
             supabase.table("historico_bot").insert({"operacao": msg}).execute()
@@ -48,21 +46,17 @@ def analisar_dados_mercado(par):
         if par == 'BTC/USDT': return 0.08, 0.18, None
         return 0.12, 0.25, None
 
-# Captura de Preço Real Multi-Ativo
 @st.cache_data(ttl=2)
 def pegar_precos_binance():
     try:
         ex = ccxt.binance()
-        t_btc = ex.fetch_ticker('BTC/USDT')['last']
-        t_eth = ex.fetch_ticker('ETH/USDT')['last']
-        return t_btc, t_eth
+        return ex.fetch_ticker('BTC/USDT')['last'], ex.fetch_ticker('ETH/USDT')['last']
     except: return None, None
 
 p_btc, p_eth = pegar_precos_binance()
 if p_btc: st.session_state.ativos['BTC/USDT']['last_p'] = p_btc
 if p_eth: st.session_state.ativos['ETH/USDT']['last_p'] = p_eth
 
-# Execução interna de análise automatizada
 sma_tendencia = {}
 if st.session_state.bot_ativo:
     for par in ['BTC/USDT', 'ETH/USDT']:
@@ -71,11 +65,9 @@ if st.session_state.bot_ativo:
         st.session_state.ativos[par]['lucro_ia'] = l
         sma_tendencia[par] = s
 
-# Alimentação do Minigráfico de Referência (Usando BTC como base visual limpa)
 st.session_state.historico_precos.append({'hora': datetime.now().strftime('%H:%M:%S'), 'preco': st.session_state.ativos['BTC/USDT']['last_p']})
 if len(st.session_state.historico_precos) > 20: st.session_state.historico_precos.pop(0)
 
-# Estilização CSS Clássica Dourado Imperial Otimizada
 st.markdown(f"""
     <style>
     header, [data-testid="stHeader"] {{ visibility: hidden; height: 0px !important; background: transparent !important; }}
@@ -102,119 +94,3 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.title("SARA_FIREBOLT")
-txt_btn = "🟢 RADAR MULTI-ATIVO ATIVO" if st.session_state.bot_ativo else "🔴 RADAR MULTI-ATIVO OFFLINE"
-if st.button(txt_btn):
-    st.session_state.bot_ativo = not st.session_state.bot_ativo
-    if st.session_state.bot_ativo:
-        for p in st.session_state.ativos:
-            st.session_state.ativos[p]['ref'] = st.session_state.ativos[p]['last_p']
-            st.session_state.ativos[p]['ordens'] = 0
-            st.session_state.ativos[p]['saldo'] = 0.0
-            st.session_state.ativos[p]['pm'] = 0.0
-            st.session_state.ativos[p]['topo'] = 0.0
-    st.rerun()
-
-# Painel Consolidado de Distribuição de Patrimônio Reis
-c_btc = st.session_state.ativos['BTC/USDT']
-c_eth = st.session_state.ativos['ETH/USDT']
-exp_btc = f"{c_btc['saldo']:.4f} BTC (Pm: ${c_btc['pm']:,.2f})" if c_btc['saldo'] > 0 else "0.0000"
-exp_eth = f"{c_eth['saldo']:.3f} ETH (Pm: ${c_eth['pm']:,.2f})" if c_eth['saldo'] > 0 else "0.0000"
-
-st.markdown(f"""
-    <div class='metric-container'>
-        <div class='metric-card'>
-            <div class='metric-title'>Disponível USDT</div>
-            <div class='metric-value'>${st.session_state.saldo_usdt:,.2f}</div>
-        </div>
-        <div class='metric-card'>
-            <div class='metric-title'>Posição Bitcoin (BTC)</div>
-            <div class='metric-value'>{exp_btc} | Pr: ${c_btc['last_p']:,.2f}</div>
-        </div>
-        <div class='metric-card'>
-            <div class='metric-title'>Posição Ethereum (ETH)</div>
-            <div class='metric-value'>{exp_eth} | Pr: ${c_eth['last_p']:,.2f}</div>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-if st.session_state.bot_ativo:
-    st.markdown(f"<div class='ia-banner'>✨ MONITORAMENTO DUAL COORDENADO | Alvos IA BTC: Queda -{c_btc['queda_ia']}% / Lucro +{c_btc['lucro_ia']}% [{c_btc['ordens']}/3] | Alvos IA ETH: Queda -{c_eth['queda_ia']}% / Lucro +{c_eth['lucro_ia']}% [{c_eth['ordens']}/3]</div>", unsafe_allow_html=True)
-else:
-    st.markdown("<div class='ia-banner' style='background-color: #211818; border-left-color: #ef4444; color: #f87171;'>💤 SISTEMA EM MODO OCIOSO. Alvos institucionais e leitura quântica dual desativados.</div>", unsafe_allow_html=True)
-
-df_p = pd.DataFrame(st.session_state.historico_precos)
-fig = go.Figure(go.Scatter(x=df_p['hora'], y=df_p['preco'], mode='lines', line=dict(color='#d4af37', width=1), fill='tozeroy', fillcolor='rgba(212, 175, 55, 0.001)'))
-fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0), height=20, xaxis=dict(showgrid=False, visible=False), yaxis=dict(showgrid=False, visible=False))
-st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-
-# --- PROCESSAMENTO EXCLUSIVO DA ENGINE MULTI-ATIVO ---
-if st.session_state.bot_ativo:
-    for par in ['BTC/USDT', 'ETH/USDT']:
-        data = st.session_state.ativos[par]
-        p_atual = data['last_p']
-        sma = sma_tendencia.get(par, None)
-        
-        # 1. MOTOR DE ENTRADAS PARCIAIS INDEPENDENTES (MÉDIA MÓVEL + FRACIONAMENTO)
-        if data['ordens'] < 3:
-            diff_c = ((p_atual - data['ref']) / data['ref']) * 100
-            tend_ok = True if (not sma or p_atual >= sma) else False
-            
-            if (data['ordens'] == 0 and tend_ok) or (diff_c <= -data['queda_ia'] and tend_ok):
-                # Cada fatia consome no máximo 1/6 do capital total para acomodar ambas as moedas simultaneamente
-                fatia = 1666.66 if st.session_state.saldo_usdt >= 1666.66 else st.session_state.saldo_usdt
-                if fatia > 20:
-                    qtd_a = fatia / p_atual
-                    custo_t = (data['saldo'] * data['pm']) + fatia
-                    
-                    st.session_state.ativos[par]['saldo'] += qtd_a
-                    st.session_state.saldo_usdt -= fatia
-                    st.session_state.ativos[par]['pm'] = custo_t / st.session_state.ativos[par]['saldo']
-                    st.session_state.ativos[par]['ordens'] += 1
-                    st.session_state.ativos[par]['ref'] = p_atual
-                    st.session_state.ativos[par]['topo'] = p_atual
-                    
-                    msg = f"🛒 RADAR DUAL [{par}]: Alocação {st.session_state.ativos[par]['ordens']}/3 executada a ${p_atual:,.2f}. Pm: ${st.session_state.ativos[par]['pm']:,.2f}"
-                    st.session_state.historico.append(msg)
-                    guardar_log(msg)
-                    st.toast(f"⚡ Posição fracionada em {par} montada.")
-                    st.rerun()
-
-        # 2. MOTOR DE SAÍDAS INDEPENDENTES COM TRAILING STOP DINÂMICO
-        if data['saldo'] > 0:
-            lucro_p = ((p_atual - data['pm']) / data['pm']) * 100
-            if p_atual > data['topo']:
-                st.session_state.ativos[par]['topo'] = p_atual
-                
-            rec_topo = ((data['topo'] - p_atual) / data['topo']) * 100
-            
-            if lucro_p >= data['lucro_ia'] and rec_topo >= 0.04:
-                val_liq = data['saldo'] * p_atual
-                luc_liq = val_liq - (data['ordens'] * 1666.66)
-                st.session_state.saldo_usdt += val_liq
-                
-                msg = f"💰 LIQUIDAÇÃO QUANTUM [{par}]: Total vendido a ${p_atual:,.2f} | Surfou lucro de +{lucro_p:.2f}% (Retorno Líquido: ${luc_liq:,.2f})"
-                st.session_state.historico.append(msg)
-                guardar_log(msg)
-                
-                st.session_state.ativos[par]['saldo'] = 0.0
-                st.session_state.ativos[par]['pm'] = 0.0
-                st.session_state.ativos[par]['ordens'] = 0
-                st.session_state.ativos[par]['ref'] = p_atual
-                st.session_state.ativos[par]['topo'] = 0.0
-                st.toast(f"👑 {par} liquidado no topo do movimento!")
-                st.rerun()
-
-st.markdown("### Histórico de Caça")
-
-if st.session_state.historico:
-    csv_d = pd.DataFrame(st.session_state.historico, columns=["Logs"]).to_csv(index=False).encode('utf-8')
-    st.download_button(label="📥 Baixar Logs (CSV)", data=csv_d, file_name="sara_firebolt_quantum_logs.csv", mime='text/csv')
-    st.write("")
-    for acao in reversed(st.session_state.historico):
-        c_cor = "log-box-buy" if "🛒" in acao else "log-box-sell"
-        st.markdown(f"<div class='log-box {c_cor}'>{acao}</div>", unsafe_allow_html=True)
-else:
-    st.markdown("<div class='log-box'>*Aguardando flutuação matemática do Bitcoin e Ethereum para registrar ordens.*</div>", unsafe_allow_html=True)
-
-time.sleep(2)
-if st.session_state.bot_ativo: st.rerun()
