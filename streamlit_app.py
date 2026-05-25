@@ -11,7 +11,7 @@ st.set_page_config(page_title="Sara_Firebolt", page_icon="⚡", layout="wide")
 
 if 'saldo_usdt' not in st.session_state:
     st.session_state.saldo_usdt = 10000.0
-    st.session_state.historico = []  # Agora armazenará dicionários estruturados
+    st.session_state.historico = []  
     st.session_state.bot_ativo = False
     st.session_state.historico_precos = []
     
@@ -207,8 +207,7 @@ st.markdown("### Histórico de Caça")
 
 if st.session_state.historico:
     df_logs = pd.DataFrame(st.session_state.historico)
-    # Gera o CSV com as colunas reais separadas, excluindo a coluna auxiliar de texto visual
-    csv_d = df_logs.drop(columns=['Texto Visual']).to_csv(index=False).encode('utf-8-sig')
+    csv_d = df_logs.drop(columns=['Texto Visual']).to_csv(index=False, sep=';').encode('utf-8-sig')
     st.download_button(label="📥 Baixar Tabela de Auditoria (CSV)", data=csv_d, file_name="sara_firebolt_financial.csv", mime='text/csv')
     st.write("")
     
