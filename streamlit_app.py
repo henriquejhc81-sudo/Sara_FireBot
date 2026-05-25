@@ -28,7 +28,6 @@ URL = st.secrets.get("SUPABASE_URL", "")
 KEY = st.secrets.get("SUPABASE_KEY", "")
 supabase = create_client(URL, KEY) if URL and KEY else None
 
-# Sincronização Inicial Inteligente com o Supabase
 if supabase and not st.session_state.historico:
     try:
         res = supabase.table("historico_bot").select("created_at, operacao").order("id", desc=False).execute()
@@ -90,12 +89,25 @@ st.markdown(f"""
     .stApp {{ background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }}
     h1 {{ color: #d4af37 !important; text-align: left; font-size: 2.2rem; font-weight: 700; margin-bottom: 15px; margin-top: -10px; }}
     h3 {{ color: #e1b12c !important; font-size: 1.1rem; font-weight: 600; margin-top: 10px; margin-bottom: 10px; }}
+    
+    /* Botão de Controle do Radar */
     div.stButton > button:first-child {{
         background-color: {"#10b981" if st.session_state.bot_ativo else "#ef4444"} !important; color: white !important; border: none !important;
         padding: 8px 20px !important; font-size: 13px !important; font-weight: 600 !important;
         border-radius: 4px !important; width: auto !important; transition: all 0.2s ease !important; margin-bottom: 10px;
     }}
-    div.stButton > button:first-child:hover {{ background-color: {"#059669" if st.session_state.bot_ativo else "#dc2626"} !important; }}
+    
+    /* ESTILIZAÇÃO COMPACTA PARA OS BOTÕES DE EXPORTAÇÃO (CSV E PDF) */
+    div[data-testid="stDownloadButton"] > button {{
+        background-color: #161b22 !important; color: #d4af37 !important; 
+        border: 1px solid #30363d !important; padding: 6px 14px !important; 
+        font-size: 12px !important; font-weight: 600 !important; border-radius: 4px !important;
+        transition: all 0.2s ease !important; width: 100% !important;
+    }}
+    div[data-testid="stDownloadButton"] > button:hover {{
+        background-color: #1c1912 !important; border-color: #d4af37 !important;
+    }}
+    
     .metric-container {{ display: flex; gap: 15px; margin-bottom: 10px; }}
     .metric-card {{ background-color: #161b22; border: 1px solid #30363d; padding: 12px 18px; border-radius: 6px; flex: 1; text-align: left; }}
     .metric-title {{ color: #8b949e; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }}
@@ -147,7 +159,11 @@ if st.session_state.bot_ativo:
 else:
     st.markdown("<div class='ia-banner' style='background-color: #211818; border-left-color: #ef4444; color: #f87171;'>💤 SISTEMA EM MODO OCIOSO. Alvos institucionais e leitura quântica dual desativados.</div>", unsafe_allow_html=True)
 
-# Lógica Interna Multi-Ativo
+df_p = pd.DataFrame(st.session_state.historico_precos)
+fig = go.Figure(go.Scatter(x=df_p['hora'], y=df_p['preco'], mode='lines', line=dict(color='#d4af37', width=1), fill='tozeroy', fillcolor='rgba(212, 175, 55, 0.001)'))
+fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0), height=20, xaxis=dict(showgrid=False, visible=False), yaxis=dict(showgrid=False, visible=False))
+st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
 if st.session_state.bot_ativo:
     for par in ['BTC/USDT', 'ETH/USDT']:
         data = st.session_state.ativos[par]
@@ -200,8 +216,8 @@ if st.session_state.bot_ativo:
                 st.toast(f"👑 {par} liquidado no topo!")
                 st.rerun()
 
-# --- FUNÇÃO GERADORA DE PDF HARVARD-STYLE ---
-def gerar_pdf_harvard(dados_historico):
+# --- FUNÇÃO GERADORA DE PDF EM PORTUGUÊS PATRIMONIAL ---
+def gerar_pdf_sara(dados_historico, s_usdt, s_btc, p_btc, s_eth, p_eth):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
@@ -211,15 +227,27 @@ def gerar_pdf_harvard(dados_historico):
     table_hdr = ParagraphStyle('TH', fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
     table_cell = ParagraphStyle('TC', fontSize=8.5, fontName='Helvetica', textColor=colors.HexColor('#222222'))
     
+    # Cálculos Patrimoniais em tempo de execução
+    val_btc = s_btc * p_btc
+    val_eth = s_eth * p_eth
+    
     story = [
-        Paragraph("HARVARD QUANTITATIVE TRADING REPORT", title_style),
-        Paragraph(f"<b>PROJECT:</b> SARA_FIREBOLT | <b>DATE:</b> {datetime.now().strftime('%d/%m/%Y')} | <b>STATUS:</b> Active", body_style),
+        Paragraph("RELATÓRIO DE AUDITORIA QUANTITATIVA — SARA_FIREBOLT", title_style),
+        Paragraph(f"<b>DATA DE EMISSÃO:</b> {datetime.now().strftime('%d/%m/%Y')} | <b>STATUS:</b> Operacional Ativo", body_style),
+        Spacer(1, 12),
+        
+        # Inclusão da Seção Patrimonial Solicitada
+        Paragraph("<b>BALANÇO CONSOLIDADO DO PATRIMÔNIO CORRENTE:</b>", body_style),
+        Paragraph(f"• <b>Garantia Disponível:</b> ${s_usdt:,.2f} USDT", body_style),
+        Paragraph(f"• <b>Alocação em Bitcoin (BTC):</b> {s_btc:.4f} BTC (~ ${val_btc:,.2f} USD)", body_style),
+        Paragraph(f"• <b>Alocação em Ethereum (ETH):</b> {s_eth:.3f} ETH (~ ${val_eth:,.2f} USD)", body_style),
         Spacer(1, 15),
-        Paragraph("<b>EXECUTIVE SUMMARY:</b> This document contains the audit trail of assets allocated by the quantitative multi-asset engine.", body_style),
-        Spacer(1, 15)
+        
+        Paragraph("<b>HISTÓRICO CRÔNICO DE OPERAÇÕES DE CAÇA:</b>", body_style),
+        Spacer(1, 8)
     ]
     
-    table_data = [[Paragraph("Timestamp", table_hdr), Paragraph("Operation Details", table_hdr)]]
+    table_data = [[Paragraph("Data / Hora", table_hdr), Paragraph("Descrição Analítica do Registro", table_hdr)]]
     for row in reversed(dados_historico):
         table_data.append([Paragraph(row['Data/Hora'], table_cell), Paragraph(row['Texto Visual'], table_cell)])
         
@@ -227,8 +255,8 @@ def gerar_pdf_harvard(dados_historico):
     t.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c1912')),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 8),
-        ('TOPPADDING', (0,0), (-1,0), 8),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('TOPPADDING', (0,0), (-1,0), 6),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
         ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9f9f9')]),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -238,7 +266,7 @@ def gerar_pdf_harvard(dados_historico):
     buffer.seek(0)
     return buffer
 
-# --- SEÇÃO VISUAL: GRÁFICOS DE RENTABILIDADE & EXPORTAÇÕES ---
+# --- RENDERIZAÇÃO DA INTERFACE FINAL ---
 st.markdown("### Histórico de Caça")
 
 if st.session_state.historico:
@@ -248,8 +276,14 @@ if st.session_state.historico:
         csv_d = df_logs.to_csv(index=False, sep=';').encode('utf-8-sig')
         st.download_button(label="📥 Baixar Tabela de Auditoria (CSV)", data=csv_d, file_name="sara_firebolt_financial.csv", mime='text/csv')
     with c_pdf:
-        pdf_data = gerar_pdf_harvard(st.session_state.historico)
-        st.download_button(label="📄 Baixar Relatório Harvard (PDF)", data=pdf_data, file_name="sara_firebolt_report.pdf", mime='application/pdf')
+        # Envia os saldos e preços atuais em tempo real para a construção interna do PDF
+        pdf_data = gerar_pdf_sara(
+            st.session_state.historico, 
+            st.session_state.saldo_usdt, 
+            c_btc['saldo'], c_btc['last_p'], 
+            c_eth['saldo'], c_eth['last_p']
+        )
+        st.download_button(label="📄 Baixar Relatório Sara_Firebolt (PDF)", data=pdf_data, file_name="sara_firebolt_report.pdf", mime='application/pdf')
         
     st.write("")
     for item in reversed(st.session_state.historico):
