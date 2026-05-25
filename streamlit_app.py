@@ -90,14 +90,12 @@ st.markdown(f"""
     h1 {{ color: #d4af37 !important; text-align: left; font-size: 2.2rem; font-weight: 700; margin-bottom: 15px; margin-top: -10px; }}
     h3 {{ color: #e1b12c !important; font-size: 1.1rem; font-weight: 600; margin-top: 10px; margin-bottom: 10px; }}
     
-    /* Botão de Controle do Radar */
     div.stButton > button:first-child {{
         background-color: {"#10b981" if st.session_state.bot_ativo else "#ef4444"} !important; color: white !important; border: none !important;
         padding: 8px 20px !important; font-size: 13px !important; font-weight: 600 !important;
         border-radius: 4px !important; width: auto !important; transition: all 0.2s ease !important; margin-bottom: 10px;
     }}
     
-    /* ESTILIZAÇÃO COMPACTA PARA OS BOTÕES DE EXPORTAÇÃO (CSV E PDF) */
     div[data-testid="stDownloadButton"] > button {{
         background-color: #161b22 !important; color: #d4af37 !important; 
         border: 1px solid #30363d !important; padding: 6px 14px !important; 
@@ -108,10 +106,10 @@ st.markdown(f"""
         background-color: #1c1912 !important; border-color: #d4af37 !important;
     }}
     
-    .metric-container {{ display: flex; gap: 15px; margin-bottom: 10px; }}
-    .metric-card {{ background-color: #161b22; border: 1px solid #30363d; padding: 12px 18px; border-radius: 6px; flex: 1; text-align: left; }}
-    .metric-title {{ color: #8b949e; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }}
-    .metric-value {{ color: #f0f6fc; font-size: 1.35rem; font-weight: 600; }}
+    .metric-container {{ display: flex; gap: 12px; margin-bottom: 10px; }}
+    .metric-card {{ background-color: #161b22; border: 1px solid #30363d; padding: 10px 14px; border-radius: 6px; flex: 1; text-align: left; }}
+    .metric-title {{ color: #8b949e; font-size: 0.70rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }}
+    .metric-value {{ color: #f0f6fc; font-size: 1.25rem; font-weight: 600; }}
     .ia-banner {{ background-color: #1c1912; border-left: 3px solid #d4af37; padding: 10px 14px; border-radius: 4px; color: #e1b12c; font-size: 0.82rem; font-weight: 500; margin-bottom: 10px; }}
     .log-box {{ background-color: #161b22; border: 1px solid #30363d; padding: 8px 14px; border-radius: 6px; color: #8b949e; font-size: 0.82rem; margin-bottom: 6px; font-family: monospace; }}
     .log-box-buy {{ border-left: 3px solid #10b981; color: #f0f6fc; }}
@@ -137,18 +135,25 @@ c_eth = st.session_state.ativos['ETH/USDT']
 exp_btc = f"{c_btc['saldo']:.4f} BTC (Pm: ${c_btc['pm']:,.2f})" if c_btc['saldo'] > 0 else "0.0000"
 exp_eth = f"{c_eth['saldo']:.3f} ETH (Pm: ${c_eth['pm']:,.2f})" if c_eth['saldo'] > 0 else "0.0000"
 
+# CÁLCULO PATRIMONIAL CONSOLIDADO LIVE (Muda a cada 2 segundos)
+patrimonio_total_live = st.session_state.saldo_usdt + (c_btc['saldo'] * c_btc['last_p']) + (c_eth['saldo'] * c_eth['last_p'])
+
 st.markdown(f"""
     <div class='metric-container'>
+        <div class='metric-card' style='border-color: #d4af37;'>
+            <div class='metric-title' style='color: #d4af37;'>💎 Patrimônio Total</div>
+            <div class='metric-value' style='color: #d4af37;'>${patrimonio_total_live:,.2f}</div>
+        </div>
         <div class='metric-card'>
             <div class='metric-title'>Disponível USDT</div>
             <div class='metric-value'>${st.session_state.saldo_usdt:,.2f}</div>
         </div>
         <div class='metric-card'>
-            <div class='metric-title'>Posição Bitcoin (BTC)</div>
+            <div class='metric-title'>Posição Bitcoin</div>
             <div class='metric-value'>{exp_btc} | Pr: ${c_btc['last_p']:,.2f}</div>
         </div>
         <div class='metric-card'>
-            <div class='metric-title'>Posição Ethereum (ETH)</div>
+            <div class='metric-title'>Posição Ethereum</div>
             <div class='metric-value'>{exp_eth} | Pr: ${c_eth['last_p']:,.2f}</div>
         </div>
     </div>
@@ -161,7 +166,7 @@ else:
 
 df_p = pd.DataFrame(st.session_state.historico_precos)
 fig = go.Figure(go.Scatter(x=df_p['hora'], y=df_p['preco'], mode='lines', line=dict(color='#d4af37', width=1), fill='tozeroy', fillcolor='rgba(212, 175, 55, 0.001)'))
-fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0), height=20, xaxis=dict(showgrid=False, visible=False), yaxis=dict(showgrid=False, visible=False))
+fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0), height=15, xaxis=dict(showgrid=False, visible=False), yaxis=dict(showgrid=False, visible=False))
 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 if st.session_state.bot_ativo:
@@ -216,47 +221,39 @@ if st.session_state.bot_ativo:
                 st.toast(f"👑 {par} liquidado no topo!")
                 st.rerun()
 
-# --- FUNÇÃO GERADORA DE PDF EM PORTUGUÊS PATRIMONIAL ---
 def gerar_pdf_sara(dados_historico, s_usdt, s_btc, p_btc, s_eth, p_eth):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
-    
     title_style = ParagraphStyle('H1', parent=styles['Heading1'], fontSize=22, textColor=colors.HexColor('#d4af37'), spaceAfter=15)
     body_style = ParagraphStyle('Body', parent=styles['BodyText'], fontSize=10, textColor=colors.HexColor('#333333'), leading=14)
     table_hdr = ParagraphStyle('TH', fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
     table_cell = ParagraphStyle('TC', fontSize=8.5, fontName='Helvetica', textColor=colors.HexColor('#222222'))
     
-    # Cálculos Patrimoniais em tempo de execução
-    val_btc = s_btc * p_btc
-    val_eth = s_eth * p_eth
+    val_btc, val_eth = s_btc * p_btc, s_eth * p_eth
+    p_total = s_usdt + val_btc + val_eth
     
     story = [
         Paragraph("RELATÓRIO DE AUDITORIA QUANTITATIVA — SARA_FIREBOLT", title_style),
         Paragraph(f"<b>DATA DE EMISSÃO:</b> {datetime.now().strftime('%d/%m/%Y')} | <b>STATUS:</b> Operacional Ativo", body_style),
         Spacer(1, 12),
-        
-        # Inclusão da Seção Patrimonial Solicitada
         Paragraph("<b>BALANÇO CONSOLIDADO DO PATRIMÔNIO CORRENTE:</b>", body_style),
+        Paragraph(f"• <b>PATRIMÔNIO TOTAL ESTIMADO:</b> ${p_total:,.2f} USD", body_style),
         Paragraph(f"• <b>Garantia Disponível:</b> ${s_usdt:,.2f} USDT", body_style),
         Paragraph(f"• <b>Alocação em Bitcoin (BTC):</b> {s_btc:.4f} BTC (~ ${val_btc:,.2f} USD)", body_style),
         Paragraph(f"• <b>Alocação em Ethereum (ETH):</b> {s_eth:.3f} ETH (~ ${val_eth:,.2f} USD)", body_style),
         Spacer(1, 15),
-        
         Paragraph("<b>HISTÓRICO CRÔNICO DE OPERAÇÕES DE CAÇA:</b>", body_style),
         Spacer(1, 8)
     ]
-    
     table_data = [[Paragraph("Data / Hora", table_hdr), Paragraph("Descrição Analítica do Registro", table_hdr)]]
     for row in reversed(dados_historico):
         table_data.append([Paragraph(row['Data/Hora'], table_cell), Paragraph(row['Texto Visual'], table_cell)])
-        
-    t = Table(table_data, colWidths=[110, 440])
+    t = Table(table_data, colWidths=)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c1912')),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 6),
-        ('TOPPADDING', (0,0), (-1,0), 6),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6), ('TOPPADDING', (0,0), (-1,0), 6),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
         ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9f9f9')]),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -266,9 +263,6 @@ def gerar_pdf_sara(dados_historico, s_usdt, s_btc, p_btc, s_eth, p_eth):
     buffer.seek(0)
     return buffer
 
-# --- RENDERIZAÇÃO DA INTERFACE FINAL ---
-st.markdown("### Histórico de Caça")
-
 if st.session_state.historico:
     c_csv, c_pdf = st.columns(2)
     with c_csv:
@@ -276,13 +270,7 @@ if st.session_state.historico:
         csv_d = df_logs.to_csv(index=False, sep=';').encode('utf-8-sig')
         st.download_button(label="📥 Baixar Tabela de Auditoria (CSV)", data=csv_d, file_name="sara_firebolt_financial.csv", mime='text/csv')
     with c_pdf:
-        # Envia os saldos e preços atuais em tempo real para a construção interna do PDF
-        pdf_data = gerar_pdf_sara(
-            st.session_state.historico, 
-            st.session_state.saldo_usdt, 
-            c_btc['saldo'], c_btc['last_p'], 
-            c_eth['saldo'], c_eth['last_p']
-        )
+        pdf_data = gerar_pdf_sara(st.session_state.historico, st.session_state.saldo_usdt, c_btc['saldo'], c_btc['last_p'], c_eth['saldo'], c_eth['last_p'])
         st.download_button(label="📄 Baixar Relatório Sara_Firebolt (PDF)", data=pdf_data, file_name="sara_firebolt_report.pdf", mime='application/pdf')
         
     st.write("")
