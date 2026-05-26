@@ -77,7 +77,8 @@ def guardar_log(msg):
 @st.cache_data(ttl=12)
 def analisar_dados_mercado(par):
     try:
-        ex = ccxt.binance()
+        # Correção Master: Substituição de Binance por Kucoin para burlar o IP Block do servidor AWS do Streamlit
+        ex = ccxt.kucoin({'enableRateLimit': True})
         velas = ex.fetch_ohlcv(par, timeframe='1m', limit=30)
         df = pd.DataFrame(velas, columns=['t', 'o', 'h', 'l', 'c', 'v'])
         df['sma20'] = df['c'].rolling(window=20).mean()
@@ -88,8 +89,10 @@ def analisar_dados_mercado(par):
 
 @st.cache_data(ttl=2)
 def pegar_precos_binance():
+    # Mantivemos o nome da função para integridade total do código, alterando apenas o provedor de dados interno
     try:
-        ex = ccxt.binance()
+        # Correção Master: Kucoin operando na mesma paridade global
+        ex = ccxt.kucoin()
         return ex.fetch_ticker('BTC/USDT')['last'], ex.fetch_ticker('ETH/USDT')['last']
     except: return None, None
 
@@ -138,6 +141,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.title("SARA_FIREBOLT")
+
 txt_btn = "🟢 RADAR MULTI-ATIVO ATIVO" if st.session_state.bot_ativo else "🔴 RADAR MULTI-ATIVO OFFLINE"
 if st.button(txt_btn):
     st.session_state.bot_ativo = not st.session_state.bot_ativo
@@ -152,7 +156,7 @@ if st.button(txt_btn):
     st.rerun()
 
 c_btc = st.session_state.ativos['BTC/USDT']
-c_eth = st.session_state.ativos['ETH/US传统'] if 'ETH/US传统' in st.session_state.ativos else st.session_state.ativos['ETH/USDT']
+c_eth = st.session_state.ativos['ETH/USDT'] 
 exp_btc = f"{c_btc['saldo']:.4f} BTC (Pm: ${c_btc['pm']:,.2f})" if c_btc['saldo'] > 0 else "0.0000"
 exp_eth = f"{c_eth['saldo']:.3f} ETH (Pm: ${c_eth['pm']:,.2f})" if c_eth['saldo'] > 0 else "0.0000"
 
@@ -217,7 +221,7 @@ if st.session_state.bot_ativo:
                     salvar_estado_banco()
                     st.toast(f"⚡ Posição fracionada em {par} montada.")
                     st.rerun()
-
+                    
         if data['saldo'] > 0:
             lucro_p = ((p_atual - data['pm']) / data['pm']) * 100
             if p_atual > data['topo']: st.session_state.ativos[par]['topo'] = p_atual
