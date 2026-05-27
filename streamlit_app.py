@@ -23,9 +23,9 @@ def carregar_estado_banco():
     estado = {
         'saldo_usdt': 10000.0, 'bot_ativo': False, 'historico': [],
         'ativos': {
-            'BTC/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.08, 'lucro_ia': 0.18, 'last_p': 64188.0},
-            'ETH/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.12, 'lucro_ia': 0.25, 'last_p': 3450.0},
-            'SOL/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.15, 'lucro_ia': 0.30, 'last_p': 160.0} # EVOLUÇÃO: Nova Moeda Adicionada
+            'BTC/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.15, 'lucro_ia': 0.30, 'last_p': 64188.0},
+            'ETH/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.20, 'lucro_ia': 0.35, 'last_p': 3450.0},
+            'SOL/USDT': {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.25, 'lucro_ia': 0.40, 'last_p': 160.0}
         }
     }
     if supabase:
@@ -36,10 +36,9 @@ def carregar_estado_banco():
                 estado['saldo_usdt'] = db['saldo_usdt']
                 estado['bot_ativo'] = db['bot_ativo']
                 
-                # EVOLUÇÃO: Proteção para atualizar bancos de dados antigos que não tinham SOL
                 db_ativos = db['ativos_json']
                 if 'SOL/USDT' not in db_ativos:
-                    db_ativos['SOL/USDT'] = {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.15, 'lucro_ia': 0.30, 'last_p': 160.0}
+                    db_ativos['SOL/USDT'] = {'saldo': 0.0, 'pm': 0.0, 'ordens': 0, 'ref': 0.0, 'topo': 0.0, 'queda_ia': 0.25, 'lucro_ia': 0.40, 'last_p': 160.0}
                 estado['ativos'] = db_ativos
             
             res_logs = supabase.table("historico_bot").select("created_at, operacao").order("id", desc=False).execute()
@@ -90,13 +89,12 @@ def analisar_dados_mercado(par):
         var_m = ((df['h'] - df['l']) / df['l']).mean() * 100
         return max(0.04, round(var_m * 0.4, 2)), max(0.08, round(var_m * 0.9, 2)), df['sma20'].iloc[-1]
     except: 
-        if par == 'BTC/USDT': return (0.08, 0.18, None)
-        elif par == 'ETH/USDT': return (0.12, 0.25, None)
-        else: return (0.15, 0.30, None) # Tratamento para SOL
+        if par == 'BTC/USDT': return (0.15, 0.30, None)
+        elif par == 'ETH/USDT': return (0.20, 0.35, None)
+        else: return (0.25, 0.40, None) 
 
 @st.cache_data(ttl=2)
 def pegar_precos_binance():
-    # Mantivemos a função base, puxando dados do Kucoin para contornar o bloqueio da AWS
     try:
         ex = ccxt.kucoin()
         return ex.fetch_ticker('BTC/USDT')['last'], ex.fetch_ticker('ETH/USDT')['last'], ex.fetch_ticker('SOL/USDT')['last']
@@ -111,14 +109,13 @@ sma_tendencia = {}
 if st.session_state.bot_ativo:
     for par in ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']:
         q, l, s = analisar_dados_mercado(par)
-        st.session_state.ativos[par]['queda_ia'] = q
-        st.session_state.ativos[par]['lucro_ia'] = l
+        # st.session_state.ativos[par]['queda_ia'] = q  # Removido para forçar o alvo fixo conservador
+        # st.session_state.ativos[par]['lucro_ia'] = l  # Removido para forçar o alvo fixo conservador
         sma_tendencia[par] = s
 
 st.session_state.historico_precos.append({'hora': datetime.now().strftime('%H:%M:%S'), 'preco': st.session_state.ativos['BTC/USDT']['last_p']})
 if len(st.session_state.historico_precos) > 20: st.session_state.historico_precos.pop(0)
 
-# EVOLUÇÃO HUD: .stSpinner display:none para remover o aviso feio de carregamento no canto da tela
 st.markdown(f"""
     <style>
     header, [data-testid="stHeader"] {{ visibility: hidden; height: 0px !important; background: transparent !important; }}
@@ -153,14 +150,14 @@ st.title("SARA_FIREBOLT")
 
 txt_btn = "🟢 RADAR MULTI-ATIVO ATIVO" if st.session_state.bot_ativo else "🔴 RADAR MULTI-ATIVO OFFLINE"
 if st.button(txt_btn):
+    # CORREÇÃO CRÍTICA: Apenas inverte o estado. Remoção do bloco que zerava a memória do bot.
     st.session_state.bot_ativo = not st.session_state.bot_ativo
+    
+    # Se estiver religando, atualizamos o "ref" (Preço de Referência) para não comprar errado baseado num preço velho.
     if st.session_state.bot_ativo:
         for p in st.session_state.ativos:
             st.session_state.ativos[p]['ref'] = st.session_state.ativos[p]['last_p']
-            st.session_state.ativos[p]['ordens'] = 0
-            st.session_state.ativos[p]['saldo'] = 0.0
-            st.session_state.ativos[p]['pm'] = 0.0
-            st.session_state.ativos[p]['topo'] = 0.0
+    
     salvar_estado_banco()
     st.rerun()
 
@@ -174,7 +171,6 @@ exp_sol = f"{c_sol['saldo']:.2f} SOL" if c_sol['saldo'] > 0 else "0.00"
 
 patrimonio_total_live = st.session_state.saldo_usdt + (c_btc['saldo'] * c_btc['last_p']) + (c_eth['saldo'] * c_eth['last_p']) + (c_sol['saldo'] * c_sol['last_p'])
 
-# EVOLUÇÃO HUD: Grid atualizado para suportar o quarto card de forma fluida
 st.markdown(f"""
     <div class='metric-container'>
         <div class='metric-card' style='border-color: #d4af37; flex: 1.2;'>
@@ -197,9 +193,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 if st.session_state.bot_ativo:
-    st.markdown(f"<div class='ia-banner'>✨ MONITORAMENTO TRIPLO | BTC: [{c_btc['ordens']}/3] | ETH: [{c_eth['ordens']}/3] | SOL: [{c_sol['ordens']}/3]</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='ia-banner'>✨ MONITORAMENTO TRIPLO INSTITUCIONAL | BTC: Queda -{c_btc['queda_ia']}% [{c_btc['ordens']}/3] | ETH: Queda -{c_eth['queda_ia']}% [{c_eth['ordens']}/3] | SOL: Queda -{c_sol['queda_ia']}% [{c_sol['ordens']}/3]</div>", unsafe_allow_html=True)
 else:
-    st.markdown("<div class='ia-banner' style='background-color: #211818; border-left-color: #ef4444; color: #f87171;'>💤 SISTEMA EM MODO OCIOSO.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='ia-banner' style='background-color: #211818; border-left-color: #ef4444; color: #f87171;'>💤 SISTEMA EM MODO OCIOSO. Memória de operações retida na nuvem.</div>", unsafe_allow_html=True)
 
 df_p = pd.DataFrame(st.session_state.historico_precos)
 if not df_p.empty:
@@ -240,13 +236,11 @@ if st.session_state.bot_ativo:
         if data['saldo'] > 0:
             lucro_p = ((p_atual - data['pm']) / data['pm']) * 100
             
-            # Atualiza o topo histórico se o preço continuar subindo
             if p_atual > data['topo']: 
                 st.session_state.ativos[par]['topo'] = p_atual
                 
             rec_topo = ((data['topo'] - p_atual) / data['topo']) * 100
             
-            # EVOLUÇÃO: Trailing Stop - Se estiver com lucro mínimo de 0.10% e cair 0.20% do topo, ele vende para proteger.
             trailing_stop_acionado = lucro_p > 0.10 and rec_topo >= 0.20
             
             if (lucro_p >= data['lucro_ia'] and rec_topo >= 0.04) or trailing_stop_acionado:
@@ -268,27 +262,69 @@ if st.session_state.bot_ativo:
                 st.toast(f"👑 {par} liquidado com sucesso!")
                 st.rerun()
 
-def gerar_pdf_sara(dados_historico, s_usdt, s_btc, p_btc, s_eth, p_eth, s_sol, p_sol):
+# EVOLUÇÃO: Relatório Forense e Institucional de Alta Precisão
+def gerar_pdf_sara(dados_historico, s_usdt, c_btc, c_eth, c_sol):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('H1', parent=styles['Heading1'], fontSize=22, textColor=colors.HexColor('#d4af37'), spaceAfter=15)
-    body_style = ParagraphStyle('Body', parent=styles['BodyText'], fontSize=10, textColor=colors.HexColor('#333333'), leading=14)
-    table_hdr = ParagraphStyle('TH', fontSize=9, fontName='Helvetica-Bold', textColor=colors.white)
-    table_cell = ParagraphStyle('TC', fontSize=8.5, fontName='Helvetica', textColor=colors.HexColor('#222222'))
     
-    val_btc, val_eth, val_sol = s_btc * p_btc, s_eth * p_eth, s_sol * p_sol
+    title_style = ParagraphStyle('H1', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#1c1912'), alignment=1, spaceAfter=10)
+    sub_title_style = ParagraphStyle('H2', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#666666'), alignment=1, spaceAfter=20)
+    header_style = ParagraphStyle('Header', parent=styles['Heading2'], fontSize=12, textColor=colors.HexColor('#d4af37'), spaceAfter=8)
+    body_style = ParagraphStyle('Body', parent=styles['BodyText'], fontSize=9, textColor=colors.HexColor('#333333'), leading=14)
+    table_hdr = ParagraphStyle('TH', fontSize=8.5, fontName='Helvetica-Bold', textColor=colors.white)
+    table_cell = ParagraphStyle('TC', fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#222222'))
+    
+    # Cálculos Forenses
+    val_btc = c_btc['saldo'] * c_btc['last_p']
+    val_eth = c_eth['saldo'] * c_eth['last_p']
+    val_sol = c_sol['saldo'] * c_sol['last_p']
+    patrimonio_total = s_usdt + val_btc + val_eth + val_sol
+    
+    exp_crypto = ((val_btc + val_eth + val_sol) / patrimonio_total) * 100 if patrimonio_total > 0 else 0
+    exp_fiat = (s_usdt / patrimonio_total) * 100 if patrimonio_total > 0 else 0
+    
+    pnl_btc = ((c_btc['last_p'] - c_btc['pm']) / c_btc['pm'] * 100) if c_btc['pm'] > 0 else 0
+    pnl_eth = ((c_eth['last_p'] - c_eth['pm']) / c_eth['pm'] * 100) if c_eth['pm'] > 0 else 0
+    pnl_sol = ((c_sol['last_p'] - c_sol['pm']) / c_sol['pm'] * 100) if c_sol['pm'] > 0 else 0
+
     story = [
-        Paragraph("RELATÓRIO DE AUDITORIA QUANTITATIVA — SARA_FIREBOLT", title_style),
-        Paragraph(f"<b>DATA DE EMISSÃO:</b> {datetime.now().strftime('%d/%m/%Y')} | <b>STATUS:</b> Operacional Ativo", body_style),
-        Spacer(1, 12),
-        Paragraph(f"• <b>PATRIMÔNIO TOTAL ESTIMADO:</b> ${s_usdt+val_btc+val_eth+val_sol:,.2f} USD", body_style),
-        Paragraph(f"• <b>Garantia Disponível:</b> ${s_usdt:,.2f} USDT", body_style),
-        Paragraph(f"• <b>Alocação BTC:</b> {s_btc:.4f} BTC (~ ${val_btc:,.2f} USD)", body_style),
-        Paragraph(f"• <b>Alocação ETH:</b> {s_eth:.3f} ETH (~ ${val_eth:,.2f} USD)", body_style),
-        Paragraph(f"• <b>Alocação SOL:</b> {s_sol:.2f} SOL (~ ${val_sol:,.2f} USD)", body_style),
-        Spacer(1, 15), Table([[Paragraph("Data / Hora", table_hdr), Paragraph("Registro", table_hdr)]] + [[Paragraph(r['Data/Hora'], table_cell), Paragraph(r['Texto Visual'], table_cell)] for r in reversed(dados_historico)], colWidths=[110, 470], style=[('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1c1912')), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc'))])
+        Paragraph("<b>RELATÓRIO DE INTELIGÊNCIA FINANCEIRA E EXPOSIÇÃO</b>", title_style),
+        Paragraph(f"SARA_FIREBOLT MULTI-ASSET ENGINE | Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", sub_title_style),
+        
+        Paragraph("<b>1. RESUMO PATRIMONIAL E RISCO DE EXPOSIÇÃO</b>", header_style),
+        Paragraph(f"• <b>Net Worth Estimado:</b> ${patrimonio_total:,.2f} USD", body_style),
+        Paragraph(f"• <b>Caixa Ocioso (Reserva de Liquidez):</b> ${s_usdt:,.2f} USDT ({exp_fiat:.1f}%)", body_style),
+        Paragraph(f"• <b>Capital Exposto em Ativos Variáveis:</b> ${val_btc+val_eth+val_sol:,.2f} USD ({exp_crypto:.1f}%)", body_style),
+        Spacer(1, 10),
+        
+        Paragraph("<b>2. DISTRIBUIÇÃO E PNL NÃO-REALIZADO</b>", header_style),
+        Paragraph(f"• <b>[BTC/USDT]</b> {c_btc['saldo']:.4f} BTC | Pm: ${c_btc['pm']:,.2f} | Atual: ${c_btc['last_p']:,.2f} | <b>PNL: {pnl_btc:+.2f}%</b>", body_style),
+        Paragraph(f"• <b>[ETH/USDT]</b> {c_eth['saldo']:.4f} ETH | Pm: ${c_eth['pm']:,.2f} | Atual: ${c_eth['last_p']:,.2f} | <b>PNL: {pnl_eth:+.2f}%</b>", body_style),
+        Paragraph(f"• <b>[SOL/USDT]</b> {c_sol['saldo']:.2f} SOL | Pm: ${c_sol['pm']:,.2f} | Atual: ${c_sol['last_p']:,.2f} | <b>PNL: {pnl_sol:+.2f}%</b>", body_style),
+        Spacer(1, 15),
+        
+        Paragraph("<b>3. REGISTRO DE AUDITORIA DE TRANSAÇÕES</b>", header_style),
     ]
+    
+    if dados_historico:
+        tabela_dados = [[Paragraph("Data / Hora", table_hdr), Paragraph("Descrição do Evento", table_hdr)]] 
+        tabela_dados += [[Paragraph(r['Data/Hora'], table_cell), Paragraph(r['Texto Visual'], table_cell)] for r in reversed(dados_historico)]
+        tabela_pdf = Table(tabela_dados, colWidths=[110, 420], repeatRows=1)
+        tabela_pdf.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#d4af37')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#060913')),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,0), 8),
+            ('TOPPADDING', (0,0), (-1,0), 8),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f9f9f9')])
+        ]))
+        story.append(tabela_pdf)
+    else:
+        story.append(Paragraph("<i>Nenhuma transação registrada no escopo atual.</i>", body_style))
+        
     doc.build(story)
     buffer.seek(0)
     return buffer
@@ -298,7 +334,7 @@ if st.session_state.historico:
     with c_csv:
         st.download_button(label="📥 Baixar Tabela (CSV)", data=pd.DataFrame(st.session_state.historico).to_csv(index=False, sep=';').encode('utf-8-sig'), file_name="sara_firebolt_financial.csv", mime='text/csv')
     with c_pdf:
-        st.download_button(label="📄 Baixar Relatório (PDF)", data=gerar_pdf_sara(st.session_state.historico, st.session_state.saldo_usdt, c_btc['saldo'], c_btc['last_p'], c_eth['saldo'], c_eth['last_p'], c_sol['saldo'], c_sol['last_p']), file_name="sara_firebolt_report.pdf", mime='application/pdf')
+        st.download_button(label="📄 Baixar Relatório Forense (PDF)", data=gerar_pdf_sara(st.session_state.historico, st.session_state.saldo_usdt, c_btc, c_eth, c_sol), file_name="sara_firebolt_forensic_report.pdf", mime='application/pdf')
     st.write("")
     for item in reversed(st.session_state.historico):
         st.markdown(f"<div class='log-box { 'log-box-buy' if '🛒' in item['Texto Visual'] else 'log-box-sell' }'>{item['Texto Visual']}</div>", unsafe_allow_html=True)
