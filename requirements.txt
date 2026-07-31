@@ -4,3 +4,4 @@ supabase
 plotly
 pandas
 reportlab
+pytz
