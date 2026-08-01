@@ -4,13 +4,12 @@ import ccxt
 import pytz
 import time
 import threading
-import random
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# ⚡ MULTIVERSE SCANNER: LIONBOT OMNICORE V8.4
-# ARQUITETURA LOCAL ULTRA-LEVE (PURA MATEMÁTICA)
+# ⚡ MULTIVERSE SCANNER: LIONBOT OMNICORE V8.5
+# ARQUITETURA LOCAL (MOMENTUM + OVERSOLD MATH)
 # ==========================================
 st.set_page_config(page_title="LionBot Multiverse", page_icon="🦁", layout="wide", initial_sidebar_state="collapsed")
 tz_br = pytz.timezone('America/Sao_Paulo')
@@ -48,58 +47,46 @@ TIMEFRAMES = ['2h', '4h', '6h', '12h']
 @st.cache_resource
 def carregar_memoria():
     return {
-        'bot_ativo': True, # Liga sozinho
+        'bot_ativo': True, 
         'simuladores': {tf: {} for tf in TIMEFRAMES}, 
-        'ultima_att': "Iniciando varredura histórica..."
+        'ultima_att': "Iniciando varredura quantitativa..."
     }
 memoria = carregar_memoria()
 
 # ==========================================
-# 3. GHOST POOL (LEITURA ANTI-BAN)
+# 3. LEITURA OTIMIZADA BINANCE
 # ==========================================
-headers_ghost = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
-}
-
 @st.cache_resource
-def iniciar_pool_leitura():
-    exchanges = [ccxt.binance(), ccxt.kucoin(), ccxt.bybit()]
-    for ex in exchanges:
-        ex.enableRateLimit = True
-        ex.headers = headers_ghost
-    return exchanges
-pool_exchanges = iniciar_pool_leitura()
-
-def obter_dados_ghost(simbolo, timeframe, limit):
-    random.shuffle(pool_exchanges)
-    for ex in pool_exchanges:
-        try: return ex.fetch_ohlcv(simbolo, timeframe, limit=limit)
-        except: continue
-    return []
+def iniciar_leitor_publico():
+    ex = ccxt.binance({
+        'enableRateLimit': True,
+        'options': {'defaultType': 'spot'}
+    })
+    return ex
+mercado = iniciar_leitor_publico()
 
 # ==========================================
-# 4. MATRIZ DE RISCO MULTI-TIME (PURA MATEMÁTICA)
+# 4. MATRIZ DE RISCO MULTI-TIME (NOVA MATEMÁTICA)
 # ==========================================
 def analise_matriz_risco(simbolo, timeframe):
     try:
-        # Puxa 100 velas para alimentar os indicadores
-        velas = obter_dados_ghost(simbolo, timeframe, 100)
+        # Puxa 100 velas (Ex: 100 velas de 4H = últimos 16 dias de dados)
+        velas = mercado.fetch_ohlcv(simbolo, timeframe, limit=100)
         
-        # BLINDAGEM DE ERRO: Se não vier dados suficientes, anula o cálculo para não gerar 0.00%
         if not velas or len(velas) < 20: return None
         
         df = pd.DataFrame(velas, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         
+        # Cálculos de Indicadores
         delta = df['close'].diff()
-        gain = delta.where(delta > 0, 0.0).ewm(alpha=14, adjust=False).mean()
-        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=14, adjust=False).mean()
+        gain = delta.where(delta > 0, 0.0).ewm(alpha=1/14, adjust=False).mean()
+        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/14, adjust=False).mean()
         rs = gain / loss
-        rsi = 100 - (100 / (1 + rs)).iloc[-1]
+        rsi = float(100 - (100 / (1 + rs)).iloc[-1])
         
-        ema_20 = df['close'].ewm(span=20, adjust=False).mean().iloc[-1]
+        ema_20 = float(df['close'].ewm(span=20, adjust=False).mean().iloc[-1])
         
-        # LÊ A VELA EXATA: Alta, Baixa, Abertura e Atual do Timeframe
+        # LÊ A VELA ATUAL (A variação exata dentro do Timeframe atual)
         vela_atual = df.iloc[-1]
         preco_open = float(vela_atual['open'])
         preco_high = float(vela_atual['high'])
@@ -110,17 +97,29 @@ def analise_matriz_risco(simbolo, timeframe):
         
         dist_ema = ((preco_atual / ema_20) - 1) * 100
         
-        # Cálculo Real de Volatilidade da Vela do Gráfico (ex: vela de 4H)
+        # Variação Real do Timeframe
         var_alta = ((preco_high / preco_open) - 1) * 100
         var_queda = ((preco_low / preco_open) - 1) * 100
         var_atual = ((preco_atual / preco_open) - 1) * 100
         
-        score_base = 50
-        if rsi < 35: score_base += 30
-        elif rsi > 70: score_base -= 40
-        if -1.0 <= dist_ema <= 0.5: score_base += 15
+        # 🧠 NOVA MATEMÁTICA DE PONTUAÇÃO (SCORE BASE)
+        score_base = 40
         
-        score_final = max(0, min(99, score_base))
+        # 1. Avaliação do RSI (Força)
+        if rsi <= 40: 
+            score_base += 40 # Oversold (Oportunidade de Rebote)
+        elif 55 <= rsi <= 68: 
+            score_base += 35 # Momentum (Tendência de Alta Saudável)
+        elif rsi > 75: 
+            score_base -= 50 # Overbought (Perigo de Queda)
+            
+        # 2. Avaliação da Média (EMA20)
+        if dist_ema < -2.0:
+            score_base += 20 # Muito abaixo da média (Puxada elástica)
+        elif 0.1 <= dist_ema <= 1.5:
+            score_base += 15 # Rompendo a média para cima
+            
+        score_final = max(0, min(99, int(score_base)))
             
         return score_final, preco_atual, preco_open, var_alta, var_queda, var_atual, rsi, dist_ema
     except Exception:
@@ -140,21 +139,24 @@ def iniciar_motores_sentinel():
                 agora = datetime.now(tz_br)
                 ts_agora = time.time()
 
-                # Varrimento da Matriz nos 4 Tempos Gráficos
+                # Varredura em Lote (Super Otimizada)
                 for tf in TIMEFRAMES:
                     for m in ALVOS_GLOBAIS:
+                        # Respeita o limite de taxa da corretora
+                        time.sleep(0.1) 
+                        
                         resultado = analise_matriz_risco(m, tf)
-                        if resultado is None: continue # Impede dados zerados na tela
+                        if resultado is None: continue 
                         
                         score_final, preco_atual, preco_open, var_alta, var_queda, var_atual, rsi, dist_ema = resultado
                         
-                        # Gatilho de Entrada Puramente Matemático (Score >= 80)
-                        if score_final >= 80 and m not in memoria['simuladores'][tf]:
+                        # 🔥 GATILHO: Exibe na tela se a matemática for favorável (Score >= 75)
+                        if score_final >= 75 and m not in memoria['simuladores'][tf]:
                             memoria['simuladores'][tf][m] = {
-                                'ts_encontrado': ts_agora # Marca a hora do achado
+                                'ts_encontrado': ts_agora 
                             }
                             
-                        # Atualiza os dados em tempo real se a moeda estiver no painel
+                        # Atualiza os dados em tempo real se a moeda já estiver no painel
                         if m in memoria['simuladores'][tf]:
                             memoria['simuladores'][tf][m].update({
                                 'preco_atual': preco_atual,
@@ -170,14 +172,11 @@ def iniciar_motores_sentinel():
                 memoria['ultima_att'] = agora.strftime('%d/%m/%Y %H:%M:%S')
 
             except Exception: pass
-            time.sleep(10) # Loop ultraleve em background
+            time.sleep(10) # Loop reinicia a cada 10 segundos
             
     threading.Thread(target=loop_operacional, daemon=True).start()
 
 iniciar_motores_sentinel()
-
-# Refresh veloz nativo para a UI acompanhar os cálculos
-time.sleep(2.5)
 
 # ==========================================
 # 6. HEADER MINIMALISTA & CONTROLE
@@ -210,18 +209,21 @@ for tf in TIMEFRAMES:
     
     if memoria['simuladores'][tf]:
         st.markdown("<div style='padding: 0 5px;'>", unsafe_allow_html=True)
-        # Grid ajustado (Removido a coluna de limites)
+        # Grid ajustado matematicamente
         hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([1.5, 2.0, 1.5, 1.5, 1.5, 0.8])
         
         with hc1: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Asset</span>", unsafe_allow_html=True)
-        with hc2: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Fundamentos (Entrada)</span>", unsafe_allow_html=True)
-        with hc3: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>PM / Current</span>", unsafe_allow_html=True)
+        with hc2: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Fundamentos (Score / RSI)</span>", unsafe_allow_html=True)
+        with hc3: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Open / Current Price</span>", unsafe_allow_html=True)
         with hc4: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Max High / Low</span>", unsafe_allow_html=True)
         with hc5: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Variação Atual</span>", unsafe_allow_html=True)
         with hc6: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Action</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border:1px solid #1e293b; margin: 8px 0;'>", unsafe_allow_html=True)
 
-        for m, dados in list(memoria['simuladores'][tf].items()):
+        # Ordenar para mostrar os maiores Scores no topo
+        moedas_ordenadas = sorted(memoria['simuladores'][tf].items(), key=lambda x: x[1].get('score', 0), reverse=True)
+
+        for m, dados in moedas_ordenadas:
             pr_atual = dados.get('preco_atual', 0.0)
             pr_open = dados.get('preco_open', 0.0)
             
@@ -237,14 +239,14 @@ for tf in TIMEFRAMES:
             duracao_s = time.time() - dados.get('ts_encontrado', time.time())
             horas_ativas = int(duracao_s // 3600)
             minutos_ativos = int((duracao_s % 3600) // 60)
-            tempo_str = f"{horas_ativas}h {minutos_ativos}m"
+            tempo_str = f"Detectado há: {horas_ativas}h {minutos_ativos}m"
 
             with st.container():
                 c1, c2, c3, c4, c5, c6 = st.columns([1.5, 2.0, 1.5, 1.5, 1.5, 0.8])
                 
                 with c1: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:14px; color:#F8FAFC; font-weight:700; padding-top:4px;'>{m}<br><span style='font-size:9px; color:#94a3b8; font-weight:normal;'>{tempo_str}</span></div>", unsafe_allow_html=True)
                 
-                with c2: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:11px; color:#94a3b8; padding-top:4px;'>RSI: <span style='color:{COR_TEMA}; font-weight:bold;'>{rsi_val:.1f}</span><br>EMA20: {ema_val:+.2f}%</div>", unsafe_allow_html=True)
+                with c2: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; font-weight:700; color:{COR_TEMA}; padding-top:2px;'>Score: {score_val}/100<br><span style='font-size:10px; color:#94a3b8; font-weight:normal;'>RSI: {rsi_val:.1f} | EMA: {ema_val:+.2f}%</span></div>", unsafe_allow_html=True)
                 
                 with c3: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; color:#94a3b8; padding-top:4px;'>${pr_open:.4f}<br><span style='color:#ffffff;'>${pr_atual:.4f}</span></div>", unsafe_allow_html=True)
                 
@@ -262,7 +264,8 @@ for tf in TIMEFRAMES:
                 st.markdown("<hr style='border:1px dashed #1e293b; margin: 8px 0;'>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div class='empty-state'>Nenhuma anomalia matemática detectada no vetor de {tf.upper()}. Escaneando o multiverso...</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='empty-state'>Nenhuma anomalia de volatilidade detectada no vetor de {tf.upper()}. Aguardando alinhamento de mercado...</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-st_autorefresh(interval=4000, key="auto_multiverse")
+# Atualização de tela a cada 5 segundos
+st_autorefresh(interval=5000, key="auto_multiverse")
