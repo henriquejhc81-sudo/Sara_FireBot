@@ -1,7 +1,5 @@
 streamlit
-ccxt
-supabase
-plotly
 pandas
-reportlab
+ccxt
 pytz
+streamlit-autorefresh
