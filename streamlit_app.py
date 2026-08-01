@@ -60,8 +60,8 @@ memoria = carregar_memoria()
 # ==========================================
 @st.cache_resource
 def iniciar_pool_leitura():
+    # Removida Binance para evitar bloqueios de IP (Geo-Block) no Streamlit Cloud
     return [
-        ccxt.binance({'enableRateLimit': True}),
         ccxt.kucoin({'enableRateLimit': True}),
         ccxt.bybit({'enableRateLimit': True}),
         ccxt.okx({'enableRateLimit': True})
@@ -77,6 +77,16 @@ def obter_dados_seguros(simbolo, timeframe, limit):
         except:
             continue
     raise Exception("Falha em todo o Pool de Corretoras.")
+
+def obter_tickers_seguros(alvos):
+    # Busca blindada de preços (Evita quebrar o loop se uma corretora falhar)
+    random.shuffle(pool_exchanges)
+    for ex in pool_exchanges:
+        try:
+            return ex.fetch_tickers(alvos)
+        except:
+            continue
+    raise Exception("Falha ao sincronizar Tickers com o Pool.")
 
 def add_log(msg, tipo="info"):
     memoria['terminal_logs'].insert(0, {"hora": datetime.now(tz_br).strftime('%H:%M:%S'), "msg": msg, "tipo": tipo})
@@ -189,9 +199,16 @@ def iniciar_motores_triade():
             try:
                 agora = datetime.now(tz_br); ts_agora = time.time(); matriz_temp = []
                 
-                # Leitura ultra-rápida de preços via Ticker Global (não dá ban)
-                for p, d in pool_exchanges[0].fetch_tickers(ALVOS_GLOBAIS).items():
-                    if d['last']: memoria['mercado_atual'][p] = float(d['last'])
+                # Leitura ultra-rápida de preços via Ticker Global (Blindado)
+                try:
+                    tickers = obter_tickers_seguros(ALVOS_GLOBAIS)
+                    for p, d in tickers.items():
+                        if p in ALVOS_GLOBAIS and d.get('last') is not None:
+                            memoria['mercado_atual'][p] = float(d['last'])
+                except Exception as e:
+                    add_log(f"⚠️ Erro Sincronia de Preços: {str(e)[:40]}", "warn")
+                    time.sleep(5)
+                    continue
 
                 for m in ALVOS_GLOBAIS:
                     analise = analise_autobolt(m)
@@ -232,6 +249,7 @@ def iniciar_motores_triade():
                 # M2 Gerenciamento
                 for m, grids in list(memoria['portfolio_m2'].items()):
                     pr = memoria['mercado_atual'].get(m)
+                    if not pr: continue
                     g_rem = []
                     for g in grids:
                         g['pico_preco'] = max(g['pico_preco'], pr)
@@ -298,30 +316,7 @@ df = pd.DataFrame(memoria['matriz_b2c'])
 if not df.empty:
     df_exibicao = df.sort_values(by="Índice de Confiança (%)", ascending=False).reset_index(drop=True)
     
-    # Renderiza a tabela customizada com botões de ação M3
-    html_table = "<table class='styled-table'><tr><th>Ação M3</th><th>Ativo</th><th>Preço Atual</th><th>Índice de Confiança (%)</th><th>Veredicto</th><th>Stop-Loss Dyn</th><th>Justificativa</th></tr>"
-    for idx, row in df_exibicao.iterrows():
-        conf = row['Índice de Confiança (%)']
-        cor = '#10b981' if conf >= 80 else '#f59e0b' if conf >= 60 else '#64748b' if conf == 0 else '#ef4444'
-        ativo_puro = row['Ativo']
-        ativo_ccxt = f"{ativo_puro}/USDT"
-        
-        # Botão de Agressão Manual (Formulário para não travar o loop do Streamlit)
-        btn_html = f"---"
-        if conf >= 60:
-            btn_html = f"""<div class='btn-sniper'><button onclick="window.parent.postMessage({{type: 'streamlit:setComponentValue', value: '{ativo_ccxt}'}}, '*');">⚡ COMPRAR</button></div>"""
-
-        html_table += f"<tr>"
-        
-        # Lógica de Botão via Streamlit (usamos colunas na UI original, mas aqui faremos botões reais fora do HTML para segurança)
-        html_table += f"<td>"
-        # Usamos uma estratégia mista: renderizamos texto, e usaremos st.columns logo abaixo se preferir, ou apenas botões no Streamlit.
-        # Para ficar perfeito, vamos usar as colunas do Streamlit para iterar.
-        
-        pass # Vamos reconstruir em formato de Streamlit Columns nativo para os botões funcionarem
-
     # RENDERIZAÇÃO NATIVA STREAMLIT PARA OS BOTÕES (MESA SNIPER)
-    # Cabeçalho
     st.markdown("<div style='display:flex; border-bottom:1px solid #1e293b; padding-bottom:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;'><div style='flex:1;'>Ação Real (M3)</div><div style='flex:1;'>Ativo</div><div style='flex:1;'>Preço</div><div style='flex:1;'>Confiança</div><div style='flex:1.5;'>Veredicto</div><div style='flex:1;'>Stop Dyn</div><div style='flex:2;'>Motivo</div></div>", unsafe_allow_html=True)
     
     for idx, row in df_exibicao.iterrows():
