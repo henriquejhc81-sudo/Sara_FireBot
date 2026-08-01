@@ -6,14 +6,15 @@ import time
 import threading
 import random
 from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
-# ⚡ MULTIVERSE SCANNER: LIONBOT OMNICORE V8.3
+# ⚡ MULTIVERSE SCANNER: LIONBOT OMNICORE V8.4
 # ARQUITETURA LOCAL ULTRA-LEVE (PURA MATEMÁTICA)
 # ==========================================
 st.set_page_config(page_title="LionBot Multiverse", page_icon="🦁", layout="wide", initial_sidebar_state="collapsed")
 tz_br = pytz.timezone('America/Sao_Paulo')
-COR_TEMA = "#00ffcc" # Verde Neon LionBot
+COR_TEMA = "#00ffcc" 
 
 # ==========================================
 # 1. ESTILIZAÇÃO CSS (MINIMALISTA EXTREMA)
@@ -23,15 +24,16 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
     
     .stApp {{ background-color: #0b0f19; color: #f8fafc; font-family: 'Inter', sans-serif; }}
-    .block-container {{ padding-top: 1rem; max-width: 98%; }} 
+    .block-container {{ padding-top: 1.5rem; max-width: 98%; }} 
     [data-testid="stHeader"] {{ display: none; }}
     
     .panel-box {{ background: linear-gradient(145deg, #161f30 0%, #0b0f19 100%); border: 1px solid #1e293b; border-radius: 6px; padding: 15px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); }}
     .panel-header {{ font-size: 13px; font-family: 'JetBrains Mono', monospace; color: {COR_TEMA}; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid #1e293b; padding-bottom: 10px; margin-bottom: 15px; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center; }}
     
-    div[data-testid="stButton"] > button {{ border-radius: 4px !important; font-weight: 600 !important; font-family: 'Inter', sans-serif !important; padding: 0.2rem 0.5rem !important; transition: all 0.3s ease !important; font-size: 10px !important; border: 1px solid transparent !important; height: 28px; }}
+    div[data-testid="stButton"] > button {{ border-radius: 4px !important; font-weight: 600 !important; font-family: 'Inter', sans-serif !important; padding: 0.2rem 0.5rem !important; transition: all 0.3s ease !important; font-size: 10px !important; border: 1px solid transparent !important; height: 32px; }}
     div[data-testid="stButton"] > button[kind="secondary"] {{ background-color: #0f172a !important; color: #94a3b8 !important; border: 1px solid #1e293b !important; }}
     div[data-testid="stButton"] > button[kind="secondary"]:hover {{ border-color: #ef4444 !important; color: #ef4444 !important; background-color: #1e1b2e !important; box-shadow: 0 0 10px rgba(239, 68, 68, 0.2) !important; }}
+    div[data-testid="stButton"] > button[kind="primary"] {{ background: linear-gradient(90deg, #0f766e 0%, #047857 100%) !important; color: #ffffff !important; border-color: {COR_TEMA} !important; }}
     
     .empty-state {{ text-align: center; padding: 25px; color: #475569; font-size: 12px; font-family: 'Inter', sans-serif; letter-spacing: 0.5px; }}
     </style>
@@ -46,9 +48,8 @@ TIMEFRAMES = ['2h', '4h', '6h', '12h']
 @st.cache_resource
 def carregar_memoria():
     return {
-        'bot_ativo': True, # 🔥 Robô já liga alimentado e rodando
+        'bot_ativo': True, # Liga sozinho
         'simuladores': {tf: {} for tf in TIMEFRAMES}, 
-        'mercado_atual': {}, 
         'ultima_att': "Iniciando varredura histórica..."
     }
 memoria = carregar_memoria()
@@ -82,35 +83,38 @@ def obter_dados_ghost(simbolo, timeframe, limit):
 # ==========================================
 def analise_matriz_risco(simbolo, timeframe):
     try:
-        # Puxa 100 velas passadas para alimentar indicadores
+        # Puxa 100 velas para alimentar os indicadores
         velas = obter_dados_ghost(simbolo, timeframe, 100)
-        if not velas: return None
+        
+        # BLINDAGEM DE ERRO: Se não vier dados suficientes, anula o cálculo para não gerar 0.00%
+        if not velas or len(velas) < 20: return None
         
         df = pd.DataFrame(velas, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         
         delta = df['close'].diff()
-        gain = delta.where(delta > 0, 0.0).ewm(alpha=1/14, adjust=False).mean()
-        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/14, adjust=False).mean()
+        gain = delta.where(delta > 0, 0.0).ewm(alpha=14, adjust=False).mean()
+        loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=14, adjust=False).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs)).iloc[-1]
         
         ema_20 = df['close'].ewm(span=20, adjust=False).mean().iloc[-1]
         
-        # Leitura da Vela Exata do Timeframe (A janela de tempo atual)
+        # LÊ A VELA EXATA: Alta, Baixa, Abertura e Atual do Timeframe
         vela_atual = df.iloc[-1]
         preco_open = float(vela_atual['open'])
         preco_high = float(vela_atual['high'])
         preco_low = float(vela_atual['low'])
         preco_atual = float(vela_atual['close'])
         
+        if preco_open <= 0 or ema_20 <= 0: return None
+        
         dist_ema = ((preco_atual / ema_20) - 1) * 100
         
-        # Cálculo Real de Volatilidade dentro da Janela do Timeframe (em Porcentagem)
+        # Cálculo Real de Volatilidade da Vela do Gráfico (ex: vela de 4H)
         var_alta = ((preco_high / preco_open) - 1) * 100
         var_queda = ((preco_low / preco_open) - 1) * 100
         var_atual = ((preco_atual / preco_open) - 1) * 100
         
-        # Score de Anomalia
         score_base = 50
         if rsi < 35: score_base += 30
         elif rsi > 70: score_base -= 40
@@ -119,7 +123,7 @@ def analise_matriz_risco(simbolo, timeframe):
         score_final = max(0, min(99, score_base))
             
         return score_final, preco_atual, preco_open, var_alta, var_queda, var_atual, rsi, dist_ema
-    except Exception as e:
+    except Exception:
         return None
 
 # ==========================================
@@ -133,20 +137,21 @@ def iniciar_motores_sentinel():
                 time.sleep(2); continue
                 
             try:
-                agora = datetime.now(tz_br); ts_agora = time.time()
+                agora = datetime.now(tz_br)
+                ts_agora = time.time()
 
                 # Varrimento da Matriz nos 4 Tempos Gráficos
                 for tf in TIMEFRAMES:
                     for m in ALVOS_GLOBAIS:
                         resultado = analise_matriz_risco(m, tf)
-                        if not resultado: continue
+                        if resultado is None: continue # Impede dados zerados na tela
                         
                         score_final, preco_atual, preco_open, var_alta, var_queda, var_atual, rsi, dist_ema = resultado
                         
                         # Gatilho de Entrada Puramente Matemático (Score >= 80)
                         if score_final >= 80 and m not in memoria['simuladores'][tf]:
                             memoria['simuladores'][tf][m] = {
-                                'ts_compra': ts_agora # Marca a hora do achado
+                                'ts_encontrado': ts_agora # Marca a hora do achado
                             }
                             
                         # Atualiza os dados em tempo real se a moeda estiver no painel
@@ -171,12 +176,29 @@ def iniciar_motores_sentinel():
 
 iniciar_motores_sentinel()
 
-# ==========================================
-# 6. INTERFACE VISUAL (MULTIVERSE PANELS)
-# ==========================================
-st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+# Refresh veloz nativo para a UI acompanhar os cálculos
+time.sleep(2.5)
 
-# Renderiza os 4 motores de forma empilhada
+# ==========================================
+# 6. HEADER MINIMALISTA & CONTROLE
+# ==========================================
+c_head1, c_head2, c_head3 = st.columns([6, 2, 2])
+with c_head1:
+    st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:22px; font-weight:900; color:{COR_TEMA}; padding-top:4px;'>LIONBOT MULTIVERSE SCANNER</div>", unsafe_allow_html=True)
+with c_head2:
+    st.markdown(f"<div style='text-align:right; font-family:\"Inter\", sans-serif; font-size:12px; color:#94a3b8; padding-top:12px;'>Motores em Operação</div>", unsafe_allow_html=True)
+with c_head3:
+    btn_label = "⏹ HALT MOTORS" if memoria['bot_ativo'] else "▶ ENGAGE OMNICORE"
+    btn_type = "secondary" if memoria['bot_ativo'] else "primary"
+    if st.button(btn_label, use_container_width=True, type=btn_type): 
+        memoria['bot_ativo'] = not memoria['bot_ativo']
+        st.rerun()
+
+st.markdown("<hr style='border:1px solid #1e293b; margin: 15px 0 25px 0;'>", unsafe_allow_html=True)
+
+# ==========================================
+# 7. INTERFACE VISUAL (PILHA DE MOTORES)
+# ==========================================
 for tf in TIMEFRAMES:
     st.markdown(f"""
     <div class='panel-box'>
@@ -212,7 +234,7 @@ for tf in TIMEFRAMES:
             score_val = dados.get('score', 0)
             
             # Cálculo de Tempo Ativo na Tela
-            duracao_s = time.time() - dados.get('ts_compra', time.time())
+            duracao_s = time.time() - dados.get('ts_encontrado', time.time())
             horas_ativas = int(duracao_s // 3600)
             minutos_ativos = int((duracao_s % 3600) // 60)
             tempo_str = f"{horas_ativas}h {minutos_ativos}m"
@@ -226,13 +248,13 @@ for tf in TIMEFRAMES:
                 
                 with c3: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; color:#94a3b8; padding-top:4px;'>${pr_open:.4f}<br><span style='color:#ffffff;'>${pr_atual:.4f}</span></div>", unsafe_allow_html=True)
                 
-                with c4: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; padding-top:4px;'><span style='color:#10b981;'>{m_alta:+.2f}%</span><br><span style='color:#ef4444;'>{m_queda:+.2f}%</span></div>", unsafe_allow_html=True)
+                with c4: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:11px; padding-top:4px;'><span style='color:#10b981;'>{m_alta:+.2f}%</span><br><span style='color:#ef4444;'>{m_queda:+.2f}%</span></div>", unsafe_allow_html=True)
                 
                 with c5: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:15px; font-weight:700; color:{'#10b981' if var_pct >= 0 else '#ef4444'}; padding-top:8px;'>{var_pct:+.2f}%</div>", unsafe_allow_html=True)
                 
                 with c6:
                     st.markdown("<div style='padding-top:4px;'>", unsafe_allow_html=True)
-                    if st.button("✕", key=f"del_{tf}_{m}", help=f"Remover", type="secondary"):
+                    if st.button("✕ DROP", key=f"del_{tf}_{m}", help=f"Remover da tela", type="secondary"):
                         del memoria['simuladores'][tf][m]
                         st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -243,6 +265,4 @@ for tf in TIMEFRAMES:
         st.markdown(f"<div class='empty-state'>Nenhuma anomalia matemática detectada no vetor de {tf.upper()}. Escaneando o multiverso...</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Loop nativo do Streamlit para manter a tela atualizando a cada 4 segundos
-time.sleep(4)
-st.rerun()
+st_autorefresh(interval=4000, key="auto_multiverse")
