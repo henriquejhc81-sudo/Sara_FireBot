@@ -5,23 +5,14 @@ import pytz
 import time
 import threading
 import random
-import os
 import plotly.express as px
 from datetime import datetime
-from supabase import create_client
-
-# Dependências de IA (Auto-Cura lida com a ausência delas)
-try:
-    from groq import Groq
-    import google.generativeai as gemini
-    IA_AVAILABLE = True
-except ImportError:
-    IA_AVAILABLE = False
 
 # ==========================================
-# ⚡ MEGA ROBÔ: LIONBOT SENTINEL // OMNICORE V7.0
+# ⚡ MEGA ROBÔ: LIONBOT SENTINEL // OMNICORE V8.0
+# ARQUITETURA LOCAL (NO DB / NO AI)
 # ==========================================
-st.set_page_config(page_title="LionBot Sentinel | Auto Bot", page_icon="🦁", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="LionBot Sentinel | Auto Bot", page_icon="🦁", layout="wide", initial_sidebar_state="collapsed")
 tz_br = pytz.timezone('America/Sao_Paulo')
 COR_TEMA = "#00ffcc" # Verde Neon LionBot
 
@@ -30,53 +21,54 @@ COR_TEMA = "#00ffcc" # Verde Neon LionBot
 # ==========================================
 st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+    
     .stApp {{ background-color: #0b0f19; color: #f8fafc; font-family: 'Inter', sans-serif; }}
     .header-box {{ background: linear-gradient(90deg, #161f30 0%, #0b0f19 100%); padding: 20px; border-radius: 10px; border-left: 4px solid {COR_TEMA}; margin-bottom: 20px; border-top: 1px solid #1e293b; box-shadow: 0 0 15px rgba(0, 255, 204, 0.1); }}
-    .titulo {{ color: {COR_TEMA}; font-weight: 900; font-family: 'Courier New', monospace; margin: 0; text-align: center; letter-spacing: 2px; text-transform: uppercase; }}
-    .subtitulo {{ color: #94a3b8; font-family: monospace; margin-top: 5px; text-align: center; font-size: 13px; }}
-    div[data-testid="stButton"] > button {{ background: linear-gradient(90deg, #0f766e 0%, #047857 100%); color: #ffffff; border: 1px solid {COR_TEMA}; border-radius: 6px; font-weight: 800; transition: all 0.3s ease; }}
-    div[data-testid="stButton"] > button:hover {{ background: {COR_TEMA}; color: #000000; box-shadow: 0 0 15px rgba(0, 255, 204, 0.6); }}
-    .btn-sniper div[data-testid="stButton"] > button {{ background: linear-gradient(90deg, #ef4444 0%, #b91c1c 100%) !important; border: 1px solid #ef4444 !important; font-size: 11px !important; padding: 2px 10px !important; min-height: 30px !important; }}
+    .titulo {{ color: {COR_TEMA}; font-weight: 900; font-family: 'JetBrains Mono', monospace; margin: 0; text-align: center; letter-spacing: 2px; text-transform: uppercase; }}
+    .subtitulo {{ color: #94a3b8; font-family: 'Inter', sans-serif; margin-top: 5px; text-align: center; font-size: 13px; font-weight: 600; }}
+    
+    .kpi-container {{ background: linear-gradient(145deg, #161f30 0%, #0b0f19 100%); border: 1px solid #1e293b; border-radius: 6px; padding: 16px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4); position: relative; overflow: hidden; height: 100%; }}
+    .kpi-container::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: {COR_TEMA}; opacity: 0.8; }}
+    .kpi-title {{ color: #94a3b8; font-size: 0.70rem; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.05em; font-family: 'Inter', sans-serif; }} 
+    .kpi-value {{ color: #ffffff; font-size: 1.6rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; text-shadow: 0 0 10px rgba(0,255,204,0.1); }}
+    
     .panel-box {{ background: #161f30; border: 1px solid #1e293b; border-radius: 8px; padding: 15px; margin-bottom: 15px; }}
-    .panel-header {{ font-size: 12px; color: {COR_TEMA}; text-transform: uppercase; font-weight: bold; border-bottom: 1px solid #1e293b; padding-bottom: 8px; margin-bottom: 12px; }}
-    .styled-table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }}
-    .styled-table th {{ color: #94a3b8; padding: 10px 8px; border-bottom: 1px solid {COR_TEMA}; background: #0b0f19; font-weight:bold; text-transform: uppercase; }}
-    .styled-table td {{ padding: 10px 8px; border-bottom: 1px solid #1e293b; color: #f1f5f9; font-weight: 500; }}
-    .terminal-box {{ background: #000000; border: 1px solid {COR_TEMA}; padding: 12px; border-radius: 4px; height: 250px; overflow-y: auto; font-size: 0.85rem; font-family: monospace; box-shadow: inset 0 0 10px rgba(0, 255, 204, 0.1); }}
-    div[data-testid="stMetricValue"] {{ color: {COR_TEMA} !important; font-weight: 900 !important; font-size: 1.8rem !important; font-family: 'Courier New', monospace; }}
+    .panel-header {{ font-size: 13px; font-family: 'Inter', sans-serif; color: {COR_TEMA}; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-bottom: 15px; letter-spacing: 0.05em; }}
+    
+    .terminal-box {{ background: #000000; border: 1px solid #1e293b; padding: 12px; border-radius: 4px; height: 250px; overflow-y: auto; font-size: 11px; font-family: 'JetBrains Mono', monospace; box-shadow: inset 0 0 10px rgba(0, 255, 204, 0.05); }}
+    .log-row {{ padding: 3px 0; border-bottom: 1px dashed #1e293b; }}
+    
+    div[data-testid="stButton"] > button {{ border-radius: 4px !important; font-weight: 600 !important; font-family: 'Inter', sans-serif !important; padding: 0.5rem 1rem !important; transition: all 0.3s ease !important; font-size: 11px !important; border: 1px solid transparent !important; }}
+    div[data-testid="stButton"] > button[kind="primary"] {{ background: linear-gradient(90deg, #0f766e 0%, #047857 100%) !important; color: #ffffff !important; border-color: {COR_TEMA} !important; }}
+    div[data-testid="stButton"] > button[kind="primary"]:hover {{ background: {COR_TEMA} !important; color: #000000 !important; box-shadow: 0 0 15px rgba(0, 255, 204, 0.6) !important; }}
+    div[data-testid="stButton"] > button[kind="secondary"] {{ background-color: #0f172a !important; color: #94a3b8 !important; border: 1px solid #1e293b !important; }}
+    div[data-testid="stButton"] > button[kind="secondary"]:hover {{ border-color: {COR_TEMA} !important; color: {COR_TEMA} !important; background-color: #1e1b2e !important; box-shadow: 0 0 10px rgba(0, 255, 204, 0.2) !important; }}
+    
+    /* Custom Tabs Styling */
+    button[data-baseweb="tab"] {{ font-family: 'JetBrains Mono', monospace !important; font-weight: bold !important; color: #94a3b8 !important; }}
+    button[data-baseweb="tab"][aria-selected="true"] {{ color: {COR_TEMA} !important; border-bottom-color: {COR_TEMA} !important; }}
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. MEMÓRIA, SUPABASE & CHAVES
+# 2. MEMÓRIA LOCAL RAM (SEM BANCO DE DADOS)
 # ==========================================
 ALVOS_GLOBAIS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'ADA/USDT', 'DOT/USDT', 'LINK/USDT', 'AVAX/USDT', 'NEAR/USDT', 'SUI/USDT']
-TAXA_CORRETORA = 0.001
-ALOCACAO_SIMULADA = 0.05
-ALOCACAO_REAL = 0.30 
-
-SUPA_URL = st.secrets.get("SUPABASE_URL", "")
-SUPA_KEY = st.secrets.get("SUPABASE_KEY", "")
-supabase = create_client(SUPA_URL, SUPA_KEY) if SUPA_URL and SUPA_KEY else None
+TIMEFRAMES = ['2h', '4h', '6h', '12h']
 
 @st.cache_resource
 def carregar_memoria():
     return {
-        'bot_ativo': False, 'caixa_livre_simulado': 10000.00, 'caixa_real': 0.0,
-        'lucro_liquido_simulado': 0.0, 'portfolio_m1': {}, 'portfolio_m2': {}, 'portfolio_m3_real': {},
-        'matriz_b2c': [], 'terminal_logs': [], 'mercado_atual': {}, 'ultima_att': "Aguardando..."
+        'bot_ativo': False, 
+        'caixa_livre_simulado': 10000.00, 
+        'lucro_liquido_simulado': 0.0, 
+        'simuladores': {tf: {} for tf in TIMEFRAMES}, # 4 Motores Independentes
+        'terminal_logs': [], 
+        'mercado_atual': {}, 
+        'ultima_att': "Aguardando..."
     }
 memoria = carregar_memoria()
-
-def salvar_seguranca_duck():
-    """🛡️ Módulo de Segurança Sentinel (Supabase Sync)"""
-    if supabase:
-        try:
-            mem_clone = memoria.copy()
-            mem_clone['bot_ativo'] = False # Não salva o estado ativo para evitar religação acidental
-            supabase.table('lion_state').upsert({'id': 1, 'state': mem_clone}).execute()
-        except:
-            add_log("Healer Engine: Falha no Supabase. Mantendo dados em RAM.", "warn")
 
 def add_log(msg, tipo="info"):
     memoria['terminal_logs'].insert(0, {"hora": datetime.now(tz_br).strftime('%H:%M:%S'), "msg": msg, "tipo": tipo})
@@ -85,7 +77,6 @@ def add_log(msg, tipo="info"):
 # ==========================================
 # 3. GHOST AI & ANTI-BAN POOL
 # ==========================================
-# GHOST AI: Mascara as requisições CCXT como se fossem de um navegador Chrome humano
 headers_ghost = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
@@ -93,7 +84,7 @@ headers_ghost = {
 
 @st.cache_resource
 def iniciar_pool_leitura():
-    exchanges = [ccxt.kucoin(), ccxt.bybit(), ccxt.okx()]
+    exchanges = [ccxt.binance(), ccxt.kucoin(), ccxt.bybit()]
     for ex in exchanges:
         ex.enableRateLimit = True
         ex.headers = headers_ghost
@@ -105,119 +96,43 @@ def obter_dados_ghost(simbolo, timeframe, limit):
     for ex in pool_exchanges:
         try: return ex.fetch_ohlcv(simbolo, timeframe, limit=limit)
         except: continue
-    raise Exception("Falha nas rotas Ghost.")
+    raise Exception(f"Falha nas rotas Ghost para {simbolo} em {timeframe}.")
 
 # ==========================================
-# 4. ORQUESTRADOR NEURAL (7 ESPECIALISTAS)
+# 4. MATRIZ DE RISCO MULTI-TIME (SEM IA)
 # ==========================================
-def orquestrador_inteligencia(ativo, dados_tec):
-    """
-    Motor Neural que simula 7 perspectivas:
-    Trend, Volatilidade, Baleias, Risco, Sentimento, Momentum, Juiz Sentinel.
-    """
-    if not IA_AVAILABLE: return dados_tec['score_base'], "Consenso Técnico (IA Offline)"
-    
-    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-    if not gemini_key: return dados_tec['score_base'], "Consenso Técnico (Chave IA Ausente)"
-    
+def analise_matriz_risco(simbolo, timeframe):
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        velas = obter_dados_ghost(simbolo, timeframe, 100)
+        df = pd.DataFrame(velas, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         
-        prompt = f"""Você é o Conselho Sentinel, formado por 7 especialistas financeiros. 
-        Analise os dados deste ativo: {ativo}. Preço: {dados_tec['preco']}. RSI 15m: {dados_tec['rsi']:.1f}. Distância EMA20: {dados_tec['dist_ema']:.2f}%. Volume 24h: Alto.
-        Avalie o risco e responda APENAS com um número de 0 a 100 (representando a Confiança) seguido de um traço e UMA frase curta justificando o voto em nome do Conselho."""
-        
-        resposta = model.generate_content(prompt).text.strip()
-        # Esperado: "85 - RSI em zona de sobrevenda com fluxo institucional favorável"
-        partes = resposta.split('-', 1)
-        score_ia = int(partes[0].strip())
-        justificativa = partes[1].strip() if len(partes) > 1 else "Consenso alcançado pela IA."
-        return score_ia, justificativa
-        
-    except Exception as e:
-        # Healer Engine atua aqui e volta para a matemática
-        return dados_tec['score_base'], "Healer Engine: Falha Neural. Veredicto Técnico aplicado."
-
-# ==========================================
-# 5. MATRIZ DE RISCO & CÁLCULOS
-# ==========================================
-def analise_matriz_risco(simbolo):
-    try:
-        velas_15m = obter_dados_ghost(simbolo, '15m', 100)
-        df_15m = pd.DataFrame(velas_15m, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        
-        # Matemática
-        delta = df_15m['close'].diff()
+        delta = df['close'].diff()
         gain = delta.where(delta > 0, 0.0).ewm(alpha=1/14, adjust=False).mean()
         loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/14, adjust=False).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs)).iloc[-1]
         
-        ema_20 = df_15m['close'].ewm(span=20, adjust=False).mean().iloc[-1]
-        preco = df_15m['close'].iloc[-1]
+        ema_20 = df['close'].ewm(span=20, adjust=False).mean().iloc[-1]
+        preco = float(df['close'].iloc[-1])
         
         dist_ema = ((preco / ema_20) - 1) * 100
         stop_loss_sugerido = preco * 0.975 
         alvo_surf = preco * 1.0075
         
-        # Matriz Matemática (Score Base)
         score_base = 50
         if rsi < 35: score_base += 30
         elif rsi > 70: score_base -= 40
         if -1.0 <= dist_ema <= 0.5: score_base += 15
         
-        dados_tec = {'preco': preco, 'rsi': rsi, 'dist_ema': dist_ema, 'score_base': score_base}
-        
-        # Filtro de Relevância: Só aciona a IA se o ativo estiver promissor matematicamente (> 60)
-        if score_base > 60:
-            score_final, motivo = orquestrador_inteligencia(simbolo, dados_tec)
-        else:
-            score_final, motivo = score_base, "Aguardando alinhamento técnico para acionar a IA."
+        score_final = max(0, min(99, score_base))
+        motivo = f"Consenso Técnico Puro ({timeframe})" if score_final >= 60 else f"Aguardando alinhamento ({timeframe})."
             
-        score_final = max(0, min(99, score_final))
-        veredicto = "ALTA PROBABILIDADE" if score_final >= 80 else "MÉDIA PROBABILIDADE" if score_final >= 60 else "BAIXA LIQUIDEZ / RISCO"
-
-        return {
-            "Ativo": simbolo, "Preço": preco, "Confianca": score_final, 
-            "Stop_Loss_Sugerido": stop_loss_sugerido, "Alvo_Sugerido": alvo_surf,
-            "Veredicto": veredicto, "Justificativa": motivo
-        }
+        return score_final, preco, stop_loss_sugerido, alvo_surf, motivo
     except Exception as e:
-        return {"Ativo": simbolo, "Preço": 0, "Confianca": 0, "Stop_Loss_Sugerido": 0, "Alvo_Sugerido": 0, "Veredicto": "FALHA", "Justificativa": str(e)}
+        return 0, 0.0, 0.0, 0.0, str(e)
 
 # ==========================================
-# 6. MOTOR 3: MESA SNIPER
-# ==========================================
-def executar_compra_real(moeda, api_key, api_secret, api_pass, dados_analise):
-    try:
-        ex_real = ccxt.kucoin({'apiKey': api_key, 'secret': api_secret, 'password': api_pass, 'enableRateLimit': True})
-        saldo = ex_real.fetch_balance()
-        caixa = float(saldo['free'].get('USDT', 0.0))
-        
-        if caixa < 10:
-            st.toast("⚠️ Saldo insuficiente na KuCoin.")
-            return False
-            
-        pr = dados_analise['Preço']
-        tamanho_ordem = caixa * ALOCACAO_REAL
-        if tamanho_ordem < 5: tamanho_ordem = 5
-        
-        qtd_alvo = float(ex_real.amount_to_precision(moeda, tamanho_ordem / pr))
-        ex_real.create_market_buy_order(moeda, qtd_alvo) # ORDEM REAL
-        
-        memoria['portfolio_m3_real'][moeda] = [{'qtd': qtd_alvo, 'pm': pr, 'pico_preco': pr, 'stop_dyn': dados_analise['Stop_Loss_Sugerido'], 'alvo': dados_analise['Alvo_Sugerido']}]
-        add_log(f"⚡ M3 SNIPER EXECUTADO! Ordem REAL de {moeda} enviada a ${pr:.4f}.", "buy")
-        st.toast(f"🎯 Compra de {moeda} executada com sucesso na KuCoin!")
-        return True
-    except Exception as e:
-        add_log(f"❌ M3 HEALER: Erro ao executar - {str(e)[:50]}", "sell")
-        st.toast("Erro na API da KuCoin. Verifique as chaves.")
-        return False
-
-# ==========================================
-# 7. THREAD CONTÍNUA (TRÍADE)
+# 5. THREAD CONTÍNUA (4 MOTORES DE SIMULAÇÃO)
 # ==========================================
 @st.cache_resource
 def iniciar_motores_sentinel():
@@ -225,68 +140,74 @@ def iniciar_motores_sentinel():
         while True:
             if not memoria['bot_ativo']: time.sleep(2); continue
             try:
-                agora = datetime.now(tz_br); ts_agora = time.time(); matriz_temp = []
+                agora = datetime.now(tz_br); ts_agora = time.time()
                 
-                # Leitura Ticker Ghost
+                # Leitura Global do Ticker Atual para todos os motores
                 try:
                     for p, d in pool_exchanges[0].fetch_tickers(ALVOS_GLOBAIS).items():
                         if d['last']: memoria['mercado_atual'][p] = float(d['last'])
                 except: pass
 
-                for m in ALVOS_GLOBAIS:
-                    analise = analise_matriz_risco(m)
-                    if analise['Preço'] <= 0: continue
-                    
-                    matriz_temp.append({
-                        "Ativo": m.replace('/USDT', ''), "Preço Atual": f"${analise['Preço']:.4f}", "Índice de Confiança (%)": analise['Confianca'],
-                        "Stop-Loss Sugerido": f"${analise['Stop_Loss_Sugerido']:.4f}", "Veredicto do Algoritmo": analise['Veredicto'],
-                        "Justificativa Base": analise['Justificativa'], "_raw_status": analise['Veredicto'], "_dados": analise
-                    })
+                # Varrimento da Matriz nos 4 Tempos Gráficos
+                for tf in TIMEFRAMES:
+                    for m in ALVOS_GLOBAIS:
+                        score_final, preco_atual, stop_dyn, alvo_dyn, motivo = analise_matriz_risco(m, tf)
+                        
+                        # Gatilho de Entrada puramente matemático
+                        if score_final >= 80 and m not in memoria['simuladores'][tf]:
+                            memoria['simuladores'][tf][m] = [{
+                                'qtd': (1000) / preco_atual, # Investimento simulado de $1000 por lote
+                                'pm': preco_atual, 
+                                'pico_preco': preco_atual,
+                                'fundo_preco': preco_atual,
+                                'stop_dyn': -0.025, # -2.50% Padrão Karv
+                                'alvo_dyn': 0.0075, # +0.75% Padrão Karv
+                                'sinal_enviado': False,
+                                'ts_compra': ts_agora
+                            }]
+                            add_log(f"🧠 Motor {tf.upper()}: Algoritmo detectou anomalia em {m} (Score: {score_final}). Armado.", "info")
+                            
+                # Gerenciamento de Custódia (As 4 Tabelas)
+                for tf in TIMEFRAMES:
+                    for m, grids in list(memoria['simuladores'][tf].items()):
+                        pr = memoria['mercado_atual'].get(m)
+                        if not pr: continue
+                        g_rem = []
+                        for g in grids:
+                            if pr > g['pico_preco']: g['pico_preco'] = pr
+                            if pr < g['fundo_preco']: g['fundo_preco'] = pr
+                            
+                            pnl_atual = (pr - g['pm']) / g['pm']
+                            pnl_do_pico = (g['pico_preco'] - g['pm']) / g['pm']
+                            queda_do_topo = (pr - g['pico_preco']) / g['pico_preco']
+                            
+                            gatilho_entrada = -0.010 # -1.0% para comprar a queda
+                            
+                            if pnl_atual <= gatilho_entrada and not g['sinal_enviado']:
+                                g['sinal_enviado'] = True
+                                add_log(f"⚡ SINAL {tf.upper()} ATIVADO! [{m}] rompeu o gatilho quantitativo.", "buy")
+                                
+                            surf_armar = g['alvo_dyn']
+                            stop_loss = g['stop_dyn']
+                            surf_recuo_fixo = -0.0025
+                            
+                            vender = False; tipo = ""
+                            if g['sinal_enviado']:
+                                if pnl_do_pico >= surf_armar and queda_do_topo <= surf_recuo_fixo and pnl_atual > 0: 
+                                    vender = True; tipo = f"WIN ({tf.upper()})"
+                                elif pnl_atual <= stop_loss: 
+                                    vender = True; tipo = f"STOP ({tf.upper()})"
+                            
+                            if vender:
+                                l = (g['qtd'] * pr) - (g['qtd'] * g['pm'])
+                                memoria['lucro_liquido_simulado'] += l
+                                add_log(f"💰 CICLO ENCERRADO [{m}]: {tipo} ${l:+.2f}", "info" if l > 0 else "sell")
+                                g_rem.append(g)
+                                
+                        for g in g_rem: grids.remove(g)
+                        if not grids: del memoria['simuladores'][tf][m]
 
-                    # M1 (Batedor)
-                    if analise['Confianca'] >= 80 and m not in memoria['portfolio_m1'] and m not in memoria['portfolio_m2']:
-                        memoria['portfolio_m1'][m] = [{'pm': analise['Preço'], 'pico_preco': analise['Preço'], 'stop_dyn': analise['Stop_Loss_Sugerido']}]
-                        add_log(f"👁️ M1: Anomalia detectada em {m}. Monitorando para queda...", "info")
-
-                memoria['matriz_b2c'] = matriz_temp
                 memoria['ultima_att'] = agora.strftime('%d/%m/%Y %H:%M:%S')
-
-                # M2 (Executor Simulado)
-                for m, grids in list(memoria['portfolio_m1'].items()):
-                    pr = memoria['mercado_atual'].get(m)
-                    if not pr: continue
-                    g_rem = []
-                    for g in grids:
-                        g['pico_preco'] = max(g['pico_preco'], pr)
-                        if ((pr - g['pm']) / g['pm']) <= -0.01:
-                            memoria['portfolio_m2'][m] = [{'qtd': (1000)/pr, 'pm': pr, 'pico_preco': pr, 'stop_dyn': g['stop_dyn']}]
-                            add_log(f"🎯 M2: Acionamento Simulado em {m} a ${pr:.4f}!", "buy")
-                            g_rem.append(g)
-                    for g in g_rem: grids.remove(g)
-                    if not grids: del memoria['portfolio_m1'][m]
-
-                # M2 Gerenciamento
-                for m, grids in list(memoria['portfolio_m2'].items()):
-                    pr = memoria['mercado_atual'].get(m)
-                    g_rem = []
-                    for g in grids:
-                        g['pico_preco'] = max(g['pico_preco'], pr)
-                        pnl_pico = (g['pico_preco'] - g['pm']) / g['pm']
-                        queda_topo = (pr - g['pico_preco']) / g['pico_preco']
-                        
-                        vender = False; tipo = ""
-                        if pnl_pico >= 0.0075 and queda_topo <= -0.0025: vender = True; tipo = "WIN (M2)"
-                        elif pr <= g['stop_dyn']: vender = True; tipo = "STOP (M2)"
-                        
-                        if vender:
-                            l = (g['qtd'] * pr) - (g['qtd'] * g['pm'])
-                            memoria['lucro_liquido_simulado'] += l
-                            add_log(f"💰 {tipo} [{m}]: ${l:+.2f}", "info" if l > 0 else "sell")
-                            g_rem.append(g)
-                    for g in g_rem: grids.remove(g)
-                    if not grids: del memoria['portfolio_m2'][m]
-                
-                salvar_seguranca_duck() # Backup Supabase
 
             except Exception as e: add_log(f"⚠️ Healer Engine: Erro no loop {str(e)[:40]}", "warn")
             time.sleep(15) 
@@ -300,89 +221,90 @@ if time.time() - memoria.get('tela_att', 0) > 3:
     st.rerun()
 
 # ==========================================
-# 8. INTERFACE VISUAL (LIONBOT AESTHETICS)
+# 6. INTERFACE VISUAL (OMNICORE DASHBOARD)
 # ==========================================
-with st.sidebar:
-    st.markdown(f"<h2 style='color:{COR_TEMA}; font-family:Courier New;'>🕹️ PAINEL LIONBOT</h2>", unsafe_allow_html=True)
-    
-    btn_label = "🛑 DESLIGAR ROBÔ" if memoria['bot_ativo'] else "⚡ LIGAR SENTINEL"
-    st.markdown(f"""<style>div[data-testid="stSidebar"] div[data-testid="stButton"] > button {{ {'background: #ef4444;' if memoria['bot_ativo'] else ''} }}</style>""", unsafe_allow_html=True)
-    if st.button(btn_label, use_container_width=True): 
-        memoria['bot_ativo'] = not memoria['bot_ativo']
-        st.toast("Status do Robô alterado!")
-        st.rerun()
-        
-    st.write("---")
-    st.markdown("### 🔐 Cofre M3 (Sniper)")
-    key_api = st.text_input("KuCoin API Key", type="password")
-    sec_api = st.text_input("KuCoin Secret", type="password")
-    pass_api = st.text_input("KuCoin Pass", type="password")
-    st.write("---")
-    if st.button("🔄 FORÇAR REFRESH"): st.rerun()
-
 st.markdown("""
     <div class="header-box" translate="no">
-        <h1 class="titulo">🦁 LIONBOT SENTINEL // OMNICORE V7.0</h1>
-        <div class="subtitulo">ORQUESTRADOR NEURAL DE 7 CABEÇAS | GHOST AI | MESA SNIPER B2C</div>
+        <h1 class="titulo">🦁 LIONBOT SENTINEL // OMNICORE V8.1</h1>
+        <div class="subtitulo">ORQUESTRADOR QUANTITATIVO DE 4 DIMENSÕES | MULTIVERSE SCANNER</div>
     </div>
 """, unsafe_allow_html=True)
 
-# KPIs e Gráfico de Horários
-col1, col2, col3 = st.columns([1, 1, 1.5])
-with col1: 
-    st.markdown("<div class='panel-box'>", unsafe_allow_html=True)
-    st.metric("Caixa Simulado", f"${memoria['caixa_livre_simulado']:,.2f}")
-    st.metric("Lucro Simulado (M2)", f"${memoria['lucro_liquido_simulado']:,.2f}")
-    st.markdown("</div>", unsafe_allow_html=True)
-with col2: 
-    st.markdown("<div class='panel-box'>", unsafe_allow_html=True)
-    st.metric("Ativos em Rastreio (M1)", len(memoria['portfolio_m1']))
-    st.metric("Ordens Reais Abertas (M3)", len(memoria['portfolio_m3_real']))
-    st.markdown("</div>", unsafe_allow_html=True)
-with col3:
-    # Gráfico de Horários de Investimento
-    st.markdown("<div class='panel-box' style='padding:5px;'>", unsafe_allow_html=True)
-    st.markdown(f"<div style='text-align:center; font-size:12px; color:{COR_TEMA}; font-weight:bold; margin-bottom:5px;'>⏰ MAPA DE CALOR: MELHORES JANELAS DE OPERAÇÃO</div>", unsafe_allow_html=True)
-    df_horas = pd.DataFrame({"Horário": ["00h-04h (Ásia)", "04h-08h (Londres)", "08h-12h (NY)", "12h-16h (NY/BR)", "16h-20h (Fechamento)"], "Oportunidade (%)": [65, 80, 95, 85, 60]})
-    fig = px.bar(df_horas, x="Horário", y="Oportunidade (%)", template="plotly_dark", color_discrete_sequence=[COR_TEMA])
-    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=140, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-    fig.update_xaxes(showgrid=False, title=None, tickfont=dict(size=9)); fig.update_yaxes(showgrid=False, showticklabels=False, title=None)
-    st.plotly_chart(fig, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+# KPIs Principais
+k1, k2, k3, k4 = st.columns(4)
+with k1: st.markdown(f"<div class='kpi-container'><div class='kpi-title'>Caixa Base Simulado</div><div class='kpi-value'>${memoria['caixa_livre_simulado']:,.2f}</div></div>", unsafe_allow_html=True)
+with k2: st.markdown(f"<div class='kpi-container'><div class='kpi-title'>Lucro Multiverso (Simulado)</div><div class='kpi-value {'text-green' if memoria['lucro_liquido_simulado']>=0 else 'text-red'}'>${memoria['lucro_liquido_simulado']:,.2f}</div></div>", unsafe_allow_html=True)
+with k3: st.markdown(f"<div class='kpi-container'><div class='kpi-title'>Total de Operações Ativas</div><div class='kpi-value text-yellow'>{sum(len(memoria['simuladores'][tf]) for tf in TIMEFRAMES)}</div></div>", unsafe_allow_html=True)
+with k4: 
+    btn_label = "⏹ HALT MOTORS" if memoria['bot_ativo'] else "▶ ENGAGE OMNICORE"
+    btn_type = "secondary" if memoria['bot_ativo'] else "primary"
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button(btn_label, use_container_width=True, type=btn_type): 
+        memoria['bot_ativo'] = not memoria['bot_ativo']
+        st.toast(f"Status dos Motores: {'LIGADOS' if memoria['bot_ativo'] else 'DESLIGADOS'}")
+        st.rerun()
 
-# Matriz B2C + Motor 3
-st.markdown(f"### 📡 MATRIX DE DECISÃO & MESA SNIPER (M3) <span style='font-size:12px; color:#64748b; float:right;'>Sincronização: {memoria['ultima_att']}</span>", unsafe_allow_html=True)
+st.markdown("<hr style='border:1px solid #1e293b; margin: 20px 0;'>", unsafe_allow_html=True)
 
-df = pd.DataFrame(memoria['matriz_b2c'])
-if not df.empty:
-    df_exibicao = df.sort_values(by="Índice de Confiança (%)", ascending=False).reset_index(drop=True)
-    
-    st.markdown(f"<div style='display:flex; border-bottom:1px solid {COR_TEMA}; padding-bottom:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;'><div style='flex:1;'>Ação (M3)</div><div style='flex:1;'>Ativo</div><div style='flex:1;'>Preço</div><div style='flex:1;'>Confiança</div><div style='flex:1.5;'>Veredicto</div><div style='flex:1;'>Stop Dyn</div><div style='flex:2;'>Inteligência Sentinel</div></div>", unsafe_allow_html=True)
-    
-    for idx, row in df_exibicao.iterrows():
-        conf = row['Índice de Confiança (%)']
-        cor = COR_TEMA if conf >= 80 else '#f59e0b' if conf >= 60 else '#64748b' if conf == 0 else '#ef4444'
-        ativo_ccxt = f"{row['Ativo']}/USDT"
-        
-        c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 1, 1, 1, 1.5, 1, 2])
-        with c1:
-            if conf >= 60:
-                st.markdown("<div class='btn-sniper'>", unsafe_allow_html=True)
-                if st.button("⚡ COMPRAR", key=f"btn_{ativo_ccxt}"):
-                    if not key_api: st.error("Insira as chaves na Barra Lateral!")
-                    else: executar_compra_real(ativo_ccxt, key_api, sec_api, pass_api, row['_dados'])
-                st.markdown("</div>", unsafe_allow_html=True)
-            else: st.markdown("<span style='color:#475569; font-size:12px;'>Bloqueado</span>", unsafe_allow_html=True)
-        with c2: st.markdown(f"<b>{row['Ativo']}</b>", unsafe_allow_html=True)
-        with c3: st.markdown(f"{row['Preço Atual']}", unsafe_allow_html=True)
-        with c4: st.markdown(f"<span style='color:{cor}; font-weight:bold; font-size:16px;'>{conf}%</span>", unsafe_allow_html=True)
-        with c5: st.markdown(f"<span style='color:{cor}; font-weight:bold;'>{row['Veredicto do Algoritmo']}</span>", unsafe_allow_html=True)
-        with c6: st.markdown(f"<span style='color:#ef4444;'>{row['Stop-Loss Sugerido']}</span>", unsafe_allow_html=True)
-        with c7: st.markdown(f"<span style='font-size:11px; color:#cbd5e1;'>{row['Justificativa Base']}</span>", unsafe_allow_html=True)
-        st.markdown("<hr style='border: 1px solid #161f30; margin: 4px 0;'>", unsafe_allow_html=True)
+# ==========================================
+# 💼 CUSTÓDIA MULTIVERSO (AS 4 DIMENSÕES DE TEMPO)
+# ==========================================
+st.markdown(f"<h3 style='font-size: 16px; color: {COR_TEMA}; font-family: \"JetBrains Mono\", monospace;'>💼 CUSTÓDIA DE GATILHOS (MOTORES SIMULADORES)</h3>", unsafe_allow_html=True)
+st.markdown(f"<p style='font-size: 12px; color: #94a3b8;'>Última Varrida: {memoria['ultima_att']}</p>", unsafe_allow_html=True)
 
-# Logs Estilo LionBot
-st.write("---")
+tabs = st.tabs(["🚀 MOTOR 2H", "🚀 MOTOR 4H", "🚀 MOTOR 6H", "🚀 MOTOR 12H"])
+
+for i, tf in enumerate(TIMEFRAMES):
+    with tabs[i]:
+        st.markdown(f"<div class='panel-box'>", unsafe_allow_html=True)
+        if memoria['simuladores'][tf]:
+            st.markdown("<div style='padding: 0 5px;'>", unsafe_allow_html=True)
+            hc1, hc2, hc3, hc4, hc5, hc6, hc7 = st.columns([1.5, 1.1, 1.3, 1.4, 1.4, 1.4, 1.1])
+            with hc1: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Asset</span>", unsafe_allow_html=True)
+            with hc2: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Gatilho Def.</span>", unsafe_allow_html=True)
+            with hc3: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Alvos (Simulado)</span>", unsafe_allow_html=True)
+            with hc4: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>PM / Current</span>", unsafe_allow_html=True)
+            with hc5: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Max High / Low</span>", unsafe_allow_html=True)
+            with hc6: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Floating PNL</span>", unsafe_allow_html=True)
+            with hc7: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Status</span>", unsafe_allow_html=True)
+            st.markdown("<hr style='border:1px solid #1e293b; margin: 8px 0;'>", unsafe_allow_html=True)
+
+            for m, grids in list(memoria['simuladores'][tf].items()):
+                qtd_tot = sum([g['qtd'] for g in grids]); pm_tot = sum([g['qtd']*g['pm'] for g in grids]) / qtd_tot if qtd_tot > 0 else 0
+                pr_atual = memoria['mercado_atual'].get(m, pm_tot)
+                pico = max([g.get('pico_preco', pm_tot) for g in grids]); fundo = min([g.get('fundo_preco', pm_tot) for g in grids])
+                
+                m_alta = ((pico - pm_tot) / pm_tot) * 100 if pm_tot > 0 else 0; m_queda = ((fundo - pm_tot) / pm_tot) * 100 if pm_tot > 0 else 0
+                pnl_usd = (qtd_tot * pr_atual) - (qtd_tot * pm_tot); pnl_pct = (pnl_usd / (qtd_tot * pm_tot)) * 100 if pm_tot > 0 else 0
+                
+                gatilho_atual = -1.0 # Gatilho visual padrão
+                sinal_enviado = grids[0].get('sinal_enviado', False)
+                status_txt = "🟢 ATIVO" if sinal_enviado else "⏳ TRACK"
+                
+                surf_u = grids[0].get('alvo_dyn')
+                stop_u = grids[0].get('stop_dyn')
+
+                with st.container():
+                    c1, c2, c3, c4, c5, c6, c7 = st.columns([1.5, 1.1, 1.3, 1.4, 1.4, 1.4, 1.1])
+                    with c1: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:13px; color:#F8FAFC; font-weight:700; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
+                    with c2: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; font-weight:700; color:{COR_TEMA}; padding-top:4px;'>{gatilho_atual:+.2f}%</div>", unsafe_allow_html=True)
+                    with c3: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:11px;'><span style='color:#10b981;'>+{surf_u*100:.2f}%</span><br><span style='color:#ef4444;'>{stop_u*100:.2f}%</span></div>", unsafe_allow_html=True)
+                    with c4: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; color:#94a3b8;'>${pm_tot:.4f}<br><span style='color:#ffffff;'>${pr_atual:.4f}</span></div>", unsafe_allow_html=True)
+                    with c5: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:11px;'><span style='color:#10b981;'>{m_alta:+.2f}%</span><br><span style='color:#ef4444;'>{m_queda:+.2f}%</span></div>", unsafe_allow_html=True)
+                    with c6: st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:14px; font-weight:700; color:{'#10b981' if pnl_pct >= 0 else '#ef4444'}; padding-top:4px;'>{pnl_pct:+.2f}%</div>", unsafe_allow_html=True)
+                    with c7:
+                        if st.button("✕ CLOSE", key=f"del_{tf}_{m}", help=f"Ejetar do simulador {tf.upper()}", type="secondary"):
+                            del memoria['simuladores'][tf][m]
+                            add_log(f"🗑️ BAIL OUT: {m} ejetada do motor {tf.upper()}.", "warn"); st.rerun()
+                    st.markdown("<hr style='border:1px dashed #1e293b; margin: 8px 0;'>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info(f"O Motor de {tf.upper()} está escaneando a liquidez em busca de anomalias estatísticas...")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ==========================================
+# 📜 TERMINAL DE LOGS SENTINEL
+# ==========================================
 st.markdown("### 📜 HISTÓRICO DE CAÇA (SENTINEL LOGS)")
 st.markdown("<div class='terminal-box'>", unsafe_allow_html=True)
 if memoria['terminal_logs']:
