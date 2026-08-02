@@ -6,8 +6,8 @@ import threading
 from datetime import datetime
 
 # ==========================================
-# ⚡ MULTIVERSE SCANNER: NEXUS ENGINE V9.0
-# ARQUITETURA DE MAPEAMENTO DE VOLATILIDADE EXTREMA
+# ⚡ MULTIVERSE SCANNER: NEXUS ENGINE V9.1
+# ARQUITETURA DE MAPEAMENTO E CORREÇÃO DE RENDERIZAÇÃO
 # ==========================================
 st.set_page_config(page_title="Nexus Multiverse Scanner", page_icon="🌌", layout="wide", initial_sidebar_state="collapsed")
 COR_TEMA = "#00ffcc" 
@@ -23,8 +23,25 @@ st.markdown(f"""
     .block-container {{ padding-top: 1.5rem; max-width: 98%; }} 
     [data-testid="stHeader"] {{ display: none; }}
     
-    .panel-box {{ background: linear-gradient(145deg, #161f30 0%, #0b0f19 100%); border: 1px solid #1e293b; border-radius: 6px; padding: 18px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); }}
-    .panel-header {{ font-size: 14px; font-family: 'JetBrains Mono', monospace; color: {COR_TEMA}; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-bottom: 15px; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center; }}
+    .panel-box {{ 
+        background: linear-gradient(145deg, #161f30 0%, #0b0f19 100%); 
+        border: 1px solid #1e293b; 
+        border-radius: 6px; 
+        padding: 18px; 
+        margin-bottom: 15px; 
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); 
+    }}
+    .panel-header {{ 
+        font-size: 14px; 
+        font-family: 'JetBrains Mono', monospace; 
+        color: {COR_TEMA}; 
+        text-transform: uppercase; 
+        font-weight: 700; 
+        letter-spacing: 1px; 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+    }}
     
     div[data-testid="stButton"] > button {{ border-radius: 4px !important; font-weight: 600 !important; font-family: 'Inter', sans-serif !important; padding: 0.2rem 0.5rem !important; transition: all 0.3s ease !important; font-size: 10px !important; border: 1px solid transparent !important; height: 32px; }}
     div[data-testid="stButton"] > button[kind="primary"] {{ background: linear-gradient(90deg, #0f766e 0%, #047857 100%) !important; color: #ffffff !important; border-color: {COR_TEMA} !important; }}
@@ -49,11 +66,10 @@ def carregar_memoria():
     return {
         'motor_rodando': True, 
         'dados_scaneados': {tf: [] for tf in TIMEFRAMES}, 
-        'ultima_varredura': "Inicializando matriz de dados..."
+        'ultima_varredura': "Aguardando sincronização inicial..."
     }
 memoria = carregar_memoria()
 
-# Conexão Segura e Otimizada com Binance
 @st.cache_resource
 def iniciar_leitor_publico():
     return ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})
@@ -64,23 +80,21 @@ exchange = iniciar_leitor_publico()
 # ==========================================
 def calcular_metricas_vela(simbolo, timeframe):
     try:
-        # Puxa 40 velas para garantir precisão no cálculo da EMA e RSI
         velas = exchange.fetch_ohlcv(simbolo, timeframe, limit=40)
         if not velas or len(velas) < 20: return None
         
+        # Força os tipos de dados como numéricos (Evita crash silencioso no Pandas)
         df = pd.DataFrame(velas, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df = df.astype({'open': float, 'high': float, 'low': float, 'close': float, 'volume': float})
         
-        # Cálculos de Força Relativa (RSI 14)
         delta = df['close'].diff()
         gain = delta.where(delta > 0, 0.0).ewm(alpha=1/14, adjust=False).mean()
         loss = (-delta.where(delta < 0, 0.0)).ewm(alpha=1/14, adjust=False).mean()
         rs = gain / loss
         rsi = float(100 - (100 / (1 + rs)).iloc[-1])
         
-        # Cálculo de Distanciamento de Média (EMA 20)
         ema_20 = float(df['close'].ewm(span=20, adjust=False).mean().iloc[-1])
         
-        # Dados exatos da vela atual (em andamento)
         vela_atual = df.iloc[-1]
         preco_open = float(vela_atual['open'])
         preco_high = float(vela_atual['high'])
@@ -91,12 +105,10 @@ def calcular_metricas_vela(simbolo, timeframe):
         
         dist_ema = ((preco_atual / ema_20) - 1) * 100
         
-        # Volatilidade Real do Timeframe (%)
         var_alta = ((preco_high / preco_open) - 1) * 100
         var_queda = ((preco_low / preco_open) - 1) * 100
         var_atual = ((preco_atual / preco_open) - 1) * 100
         
-        # CLASSIFICADOR SEMÂNTICO DE SINAIS (A INTELIGÊNCIA)
         sinal = "🟡 CONSOLIDAÇÃO"
         classe_css = "tag-neutral"
         
@@ -124,9 +136,11 @@ def calcular_metricas_vela(simbolo, timeframe):
             'dist_ema': dist_ema,
             'sinal': sinal,
             'classe_css': classe_css,
-            'volatilidade_abs': abs(var_atual) # Usado para rankear as que mais se movem
+            'volatilidade_abs': abs(var_atual)
         }
-    except Exception:
+    except Exception as e:
+        # Agora o erro vai aparecer no terminal onde você rodou o streamlit run
+        print(f"[NEXUS ENGINE ERRO] Falha ao calcular {simbolo} no TF {timeframe}: {e}")
         return None
 
 # ==========================================
@@ -144,20 +158,22 @@ def iniciar_varredura_background():
                     resultados_temporarios = []
                     
                     for m in ALVOS_GLOBAIS:
-                        time.sleep(0.3) # Respeito estrito ao Rate Limit da Binance
+                        time.sleep(0.3)
                         dados = calcular_metricas_vela(m, tf)
                         if dados:
                             resultados_temporarios.append(dados)
                             
-                    # Ordena do maior movimento para o menor (Absoluto) e pega o TOP 5
                     if resultados_temporarios:
                         resultados_ordenados = sorted(resultados_temporarios, key=lambda x: x['volatilidade_abs'], reverse=True)
-                        memoria['dados_scaneados'][tf] = resultados_ordenados[:5] # Sempre mostra os 5 melhores
+                        memoria['dados_scaneados'][tf] = resultados_ordenados[:5]
 
                 memoria['ultima_varredura'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
 
-            except Exception: pass
-            time.sleep(15) # Pausa antes de refazer a matriz completa
+            except Exception as loop_error:
+                print(f"[NEXUS ENGINE ERRO NO LOOP] {loop_error}")
+                pass
+            
+            time.sleep(15) 
             
     threading.Thread(target=loop_scan, daemon=True).start()
 
@@ -180,22 +196,21 @@ with c_head3:
 
 st.markdown("<hr style='border:1px solid #1e293b; margin: 10px 0 25px 0;'>", unsafe_allow_html=True)
 
-# Renderiza os 4 painéis de tempo gráfico
+# Renderiza os 4 painéis de tempo gráfico sem quebrar tags HTML
 for tf in TIMEFRAMES:
     st.markdown(f"""
-    <div class='panel-box'>
-        <div class='panel-header'>
+    <div class='panel-box' style='padding-bottom: 8px;'>
+        <div class='panel-header' style='border-bottom: none; margin-bottom: 0; padding-bottom: 0;'>
             <span>🚀 VETOR QUANTITATIVO {tf.upper()}</span>
             <span style='color:#64748b; font-size:10px; font-family:"Inter", sans-serif; font-weight:normal;'>Sincronização: {memoria['ultima_varredura']}</span>
         </div>
+    </div>
     """, unsafe_allow_html=True)
     
     dados_tf = memoria['dados_scaneados'][tf]
     
     if dados_tf:
-        st.markdown("<div style='padding: 0 5px;'>", unsafe_allow_html=True)
         hc1, hc2, hc3, hc4, hc5 = st.columns([1.5, 2.0, 1.8, 1.5, 1.5])
-        
         with hc1: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Asset</span>", unsafe_allow_html=True)
         with hc2: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Algorithmic Signal</span>", unsafe_allow_html=True)
         with hc3: st.markdown("<span style='color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase;'>Open / Current Price</span>", unsafe_allow_html=True)
@@ -204,39 +219,28 @@ for tf in TIMEFRAMES:
         st.markdown("<hr style='border:1px solid #1e293b; margin: 8px 0;'>", unsafe_allow_html=True)
 
         for d in dados_tf:
-            m = d['ativo']
-            pr_open = d['preco_open']
-            pr_atual = d['preco_atual']
-            m_alta = d['var_alta']
-            m_queda = d['var_queda']
-            var_pct = d['var_atual']
-            rsi_val = d['rsi']
-            ema_val = d['dist_ema']
-
-            with st.container():
-                c1, c2, c3, c4, c5 = st.columns([1.5, 2.0, 1.8, 1.5, 1.5])
+            c1, c2, c3, c4, c5 = st.columns([1.5, 2.0, 1.8, 1.5, 1.5])
+            with c1: 
+                st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:15px; color:#F8FAFC; font-weight:700; padding-top:4px;'>{d['ativo'].replace('/USDT', '')}</div>", unsafe_allow_html=True)
+            with c2: 
+                st.markdown(f"<div style='padding-top:4px;'><span class='{d['classe_css']}'>{d['sinal']}</span><br><span style='font-size:10px; color:#94a3b8; font-family:\"JetBrains Mono\", monospace;'>RSI: {d['rsi']:.1f} | EMA: {d['dist_ema']:+.2f}%</span></div>", unsafe_allow_html=True)
+            with c3: 
+                st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:13px; color:#94a3b8; padding-top:4px;'>${d['preco_open']:.4f}<br><span style='color:#ffffff;'>${d['preco_atual']:.4f}</span></div>", unsafe_allow_html=True)
+            with c4: 
+                st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; padding-top:4px;'><span style='color:#10b981;'>{d['var_alta']:+.2f}%</span><br><span style='color:#ef4444;'>{d['var_queda']:+.2f}%</span></div>", unsafe_allow_html=True)
+            with c5: 
+                st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:16px; font-weight:700; color:{'#10b981' if d['var_atual'] >= 0 else '#ef4444'}; padding-top:8px;'>{d['var_atual']:+.2f}%</div>", unsafe_allow_html=True)
                 
-                with c1: 
-                    st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:15px; color:#F8FAFC; font-weight:700; padding-top:4px;'>{m.replace('/USDT', '')}</div>", unsafe_allow_html=True)
-                
-                with c2: 
-                    st.markdown(f"<div style='padding-top:4px;'><span class='{d['classe_css']}'>{d['sinal']}</span><br><span style='font-size:10px; color:#94a3b8; font-family:\"JetBrains Mono\", monospace;'>RSI: {rsi_val:.1f} | EMA: {ema_val:+.2f}%</span></div>", unsafe_allow_html=True)
-                
-                with c3: 
-                    st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:13px; color:#94a3b8; padding-top:4px;'>${pr_open:.4f}<br><span style='color:#ffffff;'>${pr_atual:.4f}</span></div>", unsafe_allow_html=True)
-                
-                with c4: 
-                    st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:12px; padding-top:4px;'><span style='color:#10b981;'>{m_alta:+.2f}%</span><br><span style='color:#ef4444;'>{m_queda:+.2f}%</span></div>", unsafe_allow_html=True)
-                
-                with c5: 
-                    st.markdown(f"<div style='font-family:\"JetBrains Mono\", monospace; font-size:16px; font-weight:700; color:{'#10b981' if var_pct >= 0 else '#ef4444'}; padding-top:8px;'>{var_pct:+.2f}%</div>", unsafe_allow_html=True)
-                    
-                st.markdown("<hr style='border:1px dashed #1e293b; margin: 8px 0;'>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("<hr style='border:1px dashed #1e293b; margin: 8px 0;'>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div class='empty-state'>Iniciando cálculos matriziais para o vetor {tf.upper()}...</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class='panel-box' style='text-align: center; color: #94a3b8; margin-top: -10px; border-top: none;'>
+            Iniciando cálculos matriziais para o vetor {tf.upper()}...
+        </div>
+        """, unsafe_allow_html=True)
+        
+    st.markdown("<br>", unsafe_allow_html=True)
 
-# Loop de atualização visual sem estourar a API
+# Loop de atualização visual
 time.sleep(8)
 st.rerun()
